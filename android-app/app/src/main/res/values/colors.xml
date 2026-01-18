@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SaveState brand colors -->
+    <color name="savestate_red">#D32F2F</color>
+    <color name="savestate_red_dark">#B71C1C</color>
+    <color name="savestate_red_light">#EF5350</color>
+    
+    <!-- Dark theme backgrounds -->
+    <color name="dark_background">#1A1A1A</color>
+    <color name="dark_surface">#242424</color>
+    <color name="dark_surface_variant">#2D2D2D</color>
+    
+    <!-- Text colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B0B0</color>
+</resources>

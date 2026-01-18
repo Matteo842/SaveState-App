@@ -1,3 +1,5 @@
 /material
 /android-app/app/build
 /android-app/.gradle
+/android-app/.idea
+/android-app/build
