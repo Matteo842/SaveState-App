@@ -12,6 +12,10 @@
     <!-- For Android 11+ (API 30+) scoped storage -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    
+    <!-- For detecting installed emulators (Android 11+) -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <application
         android:allowBackup="true"
