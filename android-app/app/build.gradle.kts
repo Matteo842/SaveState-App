@@ -60,6 +60,9 @@ dependencies {
     // Navigation
     implementation(libs.androidx.navigation.compose)
     
+    // Document File (SAF)
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

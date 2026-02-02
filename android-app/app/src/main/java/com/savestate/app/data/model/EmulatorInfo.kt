@@ -15,6 +15,18 @@ data class EmulatorInfo(
 )
 
 /**
+ * Represents a detected game/save found in an emulator's save directory
+ */
+data class DetectedGame(
+    val gameId: String,          // Unique ID (e.g., folder name like "ULUS10041")
+    val gameName: String,        // Display name (e.g., "God of War: Chains of Olympus")
+    val savePath: String,        // Full path to the save folder
+    val emulatorType: Emulator,
+    val saveCount: Int = 0,      // Number of save files found
+    val lastModified: Long = 0   // Last modification timestamp
+)
+
+/**
  * Configuration for known emulators with their package names and default save paths
  */
 object EmulatorConfig {
@@ -26,6 +38,24 @@ object EmulatorConfig {
         val defaultSavePaths: List<String>
     )
     
+    // PPSSPP specific paths - checked in order of priority
+    val ppssppSavePaths = listOf(
+        // Option 1: Default/Recommended - User created PSP folder in root storage
+        "/storage/emulated/0/PSP/SAVEDATA",
+        
+        // Option 2: Base option (not recommended) - App's private external storage (Free version)
+        "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/SAVEDATA",
+        
+        // Option 3: Base option (not recommended) - App's private external storage (Gold version)
+        "/storage/emulated/0/Android/data/org.ppsspp.ppssppgold/files/PSP/SAVEDATA"
+    )
+    
+    val ppssppStatePaths = listOf(
+        "/storage/emulated/0/PSP/PPSSPP_STATE",
+        "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/PPSSPP_STATE",
+        "/storage/emulated/0/Android/data/org.ppsspp.ppssppgold/files/PSP/PPSSPP_STATE"
+    )
+    
     val knownEmulators = listOf(
         // PPSSPP - PSP Emulator (Primary focus)
         EmulatorDefinition(
@@ -35,10 +65,7 @@ object EmulatorConfig {
                 "org.ppsspp.ppssppgold"     // Gold version
             ),
             displayName = "PPSSPP",
-            defaultSavePaths = listOf(
-                "/storage/emulated/0/PSP/SAVEDATA",      // Game saves
-                "/storage/emulated/0/PSP/PPSSPP_STATE"   // Save states
-            )
+            defaultSavePaths = ppssppSavePaths + ppssppStatePaths
         ),
         
         // RetroArch - Multi-system emulator
