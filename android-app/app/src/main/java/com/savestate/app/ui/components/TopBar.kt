@@ -107,19 +107,6 @@ fun ProfileTableHeader(
             modifier = Modifier.weight(1f)
         )
         
-        // Backup Info column header
-        Box(
-            modifier = Modifier.width(180.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Text(
-                text = "Backup Info",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-        
         // Space for delete button column
         Spacer(modifier = Modifier.width(40.dp))
     }

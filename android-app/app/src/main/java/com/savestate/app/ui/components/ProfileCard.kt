@@ -110,29 +110,6 @@ fun ProfileCard(
             )
         }
 
-        // Backup info column (like desktop "Backup Info" column)
-        Box(
-            modifier = Modifier
-                .width(180.dp)
-                .padding(end = 8.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            if (profile.backupCount > 0 && profile.lastBackup != null) {
-                Text(
-                    text = "Backups: ${profile.backupCount} | Last: ${profile.lastBackup}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            } else {
-                Text(
-                    text = "No backups",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted
-                )
-            }
-        }
 
         // Delete button (visible on selection like desktop)
         if (isSelected) {

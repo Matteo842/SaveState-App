@@ -7,8 +7,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.savestate.app.data.model.GameProfile
 import com.savestate.app.ui.components.*
@@ -43,6 +45,7 @@ fun MainScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
+            .statusBarsPadding()
     ) {
         // Top app bar - matching desktop title bar
         SaveStateTopBar(
@@ -134,8 +137,9 @@ fun ProfilesSection(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .weight(1f)
                             .padding(32.dp),
-                        contentAlignment = androidx.compose.ui.Alignment.Center
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "No profiles yet.\nTap \"New Profile...\" to add your first game.",
@@ -146,7 +150,9 @@ fun ProfilesSection(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
                     ) {
                         itemsIndexed(profiles) { index, profile ->
                             ProfileCard(
@@ -158,6 +164,48 @@ fun ProfilesSection(
                                 onDeleteClick = { onDeleteProfile(profile.id) }
                             )
                         }
+                    }
+                }
+
+                // Backup Info Footer (New)
+                HorizontalDivider(
+                    color = DarkSurface,
+                    thickness = 1.dp
+                )
+
+                val selectedProfile = profiles.find { it.id == selectedProfileId }
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp) // Fixed height for footer
+                        .background(DarkSurfaceVariant)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    if (selectedProfile != null) {
+                        if (selectedProfile.backupCount > 0 && selectedProfile.lastBackup != null) {
+                            Text(
+                                text = "Backups: ${selectedProfile.backupCount} | Last: ${selectedProfile.lastBackup}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Text(
+                                text = "No backups available",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextMuted,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    } else {
+                         Text(
+                            text = "Select a profile to view details",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextMuted
+                        )
                     }
                 }
             }

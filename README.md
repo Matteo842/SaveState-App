@@ -25,6 +25,7 @@ The aim is to create a clean, modern interface for managing emulator save states
 * **Material Design 3:** Utilizing modern Android components.
 * **Dark Mode:** Native dark theme support.
 * **Emulator Cards:** Visual layout for different emulator profiles.
+![Screenshot](images/Screenshot.png)
 
 ## 📅 Roadmap
 There is **no estimated timeline (ETA)** for a functional release. Development is happening sporadically as a feasibility study.
