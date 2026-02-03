@@ -15,8 +15,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.documentfile.provider.DocumentFile
+import com.savestate.app.data.BackupDirectoryInfo
 import com.savestate.app.data.EmulatorDetector
 import com.savestate.app.data.GameScanner
+import com.savestate.app.data.SettingsManager
 import com.savestate.app.data.SfoParser
 import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
@@ -25,6 +27,7 @@ import com.savestate.app.data.model.GameProfile
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
 import com.savestate.app.ui.screens.MainScreen
+import com.savestate.app.ui.screens.SettingsScreen
 import com.savestate.app.ui.theme.SaveStateTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -37,6 +40,7 @@ class MainActivity : ComponentActivity() {
     
     private lateinit var emulatorDetector: EmulatorDetector
     private lateinit var gameScanner: GameScanner
+    private lateinit var settingsManager: SettingsManager
     
     // Callback to run after storage permission is granted
     private var onStoragePermissionGranted: (() -> Unit)? = null
@@ -45,7 +49,10 @@ class MainActivity : ComponentActivity() {
     private var currentEmulator: EmulatorInfo? = null
     private var onGamesDetected: ((List<DetectedGame>) -> Unit)? = null
     
-    // SAF folder picker launcher
+    // Callback for settings backup path selection
+    private var onBackupPathSelected: ((String) -> Unit)? = null
+    
+    // SAF folder picker launcher (for game folder selection)
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -65,13 +72,57 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    // SAF folder picker for settings backup path
+    private val settingsFolderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            Log.d("SaveState", "User selected backup folder: $uri")
+            
+            // Convert SAF URI to file path for internal storage
+            // Note: For external storage we need to handle differently
+            val path = getPathFromUri(uri)
+            if (path != null) {
+                onBackupPathSelected?.invoke(path)
+            } else {
+                // Fallback to URI string if path resolution fails
+                Toast.makeText(this, "Please select a folder in internal storage", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    /**
+     * Convert a SAF URI to a file path (works for internal storage)
+     */
+    private fun getPathFromUri(uri: Uri): String? {
+        try {
+            val docId = DocumentsContract.getTreeDocumentId(uri)
+            val split = docId.split(":")
+            if (split.size >= 2) {
+                val type = split[0]
+                val relativePath = split[1]
+                
+                if (type == "primary") {
+                    return "${Environment.getExternalStorageDirectory().absolutePath}/$relativePath"
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SaveState", "Error converting URI to path: ${e.message}")
+        }
+        return null
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // Initialize detectors
+        // Initialize detectors and managers
         emulatorDetector = EmulatorDetector(applicationContext)
         gameScanner = GameScanner()
+        settingsManager = SettingsManager(applicationContext)
+        
+        // Ensure backup directory exists on startup
+        settingsManager.ensureBackupDirectoryExists()
         
         setContent {
             SaveStateTheme {
@@ -93,6 +144,22 @@ class MainActivity : ComponentActivity() {
                 var selectedProfileId by remember { mutableStateOf<String?>(null) }
                 var isDarkTheme by remember { mutableStateOf(true) }
                 var profiles by remember { mutableStateOf<List<GameProfile>>(emptyList()) }
+                
+                // Navigation state
+                var showSettingsScreen by remember { mutableStateOf(false) }
+                
+                // Settings state
+                var currentBackupPath by remember { mutableStateOf(settingsManager.getBackupPath()) }
+                var backupInfo by remember { mutableStateOf<BackupDirectoryInfo?>(null) }
+                var isMigrating by remember { mutableStateOf(false) }
+                var migrationProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+                
+                // Load backup info on startup
+                LaunchedEffect(currentBackupPath) {
+                    backupInfo = withContext(Dispatchers.IO) {
+                        settingsManager.getBackupDirectoryInfo()
+                    }
+                }
                 
                 // Setup callback for SAF folder scanning
                 LaunchedEffect(Unit) {
@@ -123,67 +190,149 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                MainScreen(
-                    profiles = profiles,
-                    selectedProfileId = selectedProfileId,
-                    onProfileSelect = { id -> selectedProfileId = id },
-                    onFavoriteToggle = { id ->
-                        profiles = profiles.map { 
-                            if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it 
-                        }
-                    },
-                    onDeleteProfile = { id ->
-                        profiles = profiles.filter { it.id != id }
-                        if (selectedProfileId == id) selectedProfileId = null
-                    },
-                    onBackupClick = { /* TODO: Implement backup */ },
-                    onRestoreClick = { /* TODO: Implement restore */ },
-                    onManageBackupsClick = { /* TODO: Show manage backups dialog */ },
-                    onNewProfileClick = { 
-                        // Check storage permission first
-                        if (!hasStoragePermission()) {
-                            requestStoragePermission {
-                                // After permission granted, start emulator detection
-                                showEmulatorDialog = true
-                                isLoadingEmulators = true
+                // Navigation: Show either MainScreen or SettingsScreen
+                if (showSettingsScreen) {
+                    SettingsScreen(
+                        currentBackupPath = currentBackupPath,
+                        backupInfo = backupInfo,
+                        isMigrating = isMigrating,
+                        migrationProgress = migrationProgress,
+                        onBackClick = { showSettingsScreen = false },
+                        onBrowseBackupPath = {
+                            // Setup callback for when user selects a folder
+                            onBackupPathSelected = { newPath ->
+                                // Start migration
+                                isMigrating = true
+                                migrationProgress = null
                                 
                                 coroutineScope.launch {
-                                    delay(300)
-                                    val detected = withContext(Dispatchers.IO) {
-                                        emulatorDetector.detectInstalledEmulators()
+                                    val result = settingsManager.changeBackupPath(newPath) { current, total ->
+                                        migrationProgress = Pair(current, total)
                                     }
-                                    installedEmulators = detected
-                                    isLoadingEmulators = false
-                                    Log.d("SaveState", "Detected ${detected.size} emulators")
+                                    
+                                    result.onSuccess { count ->
+                                        currentBackupPath = settingsManager.getBackupPath()
+                                        backupInfo = withContext(Dispatchers.IO) {
+                                            settingsManager.getBackupDirectoryInfo()
+                                        }
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Moved $count files to new location",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }.onFailure { error ->
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Error: ${error.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                    
+                                    isMigrating = false
+                                    migrationProgress = null
                                 }
                             }
-                            return@MainScreen
-                        }
-                        
-                        // Start scanning for emulators
-                        showEmulatorDialog = true
-                        isLoadingEmulators = true
-                        
-                        coroutineScope.launch {
-                            // Small delay for UI feedback
-                            delay(300)
                             
-                            // Detect emulators on background thread
-                            val detected = withContext(Dispatchers.IO) {
-                                emulatorDetector.detectInstalledEmulators()
+                            // Open folder picker
+                            settingsFolderPickerLauncher.launch(null)
+                        },
+                        onResetToDefault = {
+                            // Reset to default path
+                            isMigrating = true
+                            migrationProgress = null
+                            
+                            coroutineScope.launch {
+                                val result = settingsManager.resetToDefaultPath { current, total ->
+                                    migrationProgress = Pair(current, total)
+                                }
+                                
+                                result.onSuccess { count ->
+                                    currentBackupPath = settingsManager.getBackupPath()
+                                    backupInfo = withContext(Dispatchers.IO) {
+                                        settingsManager.getBackupDirectoryInfo()
+                                    }
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Reset to default. Moved $count files.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }.onFailure { error ->
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Error: ${error.message}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                                
+                                isMigrating = false
+                                migrationProgress = null
+                            }
+                        },
+                        appVersion = "1.0"
+                    )
+                } else {
+                    MainScreen(
+                        profiles = profiles,
+                        selectedProfileId = selectedProfileId,
+                        onProfileSelect = { id -> selectedProfileId = id },
+                        onFavoriteToggle = { id ->
+                            profiles = profiles.map { 
+                                if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it 
+                            }
+                        },
+                        onDeleteProfile = { id ->
+                            profiles = profiles.filter { it.id != id }
+                            if (selectedProfileId == id) selectedProfileId = null
+                        },
+                        onBackupClick = { /* TODO: Implement backup */ },
+                        onRestoreClick = { /* TODO: Implement restore */ },
+                        onManageBackupsClick = { /* TODO: Show manage backups dialog */ },
+                        onNewProfileClick = { 
+                            // Check storage permission first
+                            if (!hasStoragePermission()) {
+                                requestStoragePermission {
+                                    // After permission granted, start emulator detection
+                                    showEmulatorDialog = true
+                                    isLoadingEmulators = true
+                                    
+                                    coroutineScope.launch {
+                                        delay(300)
+                                        val detected = withContext(Dispatchers.IO) {
+                                            emulatorDetector.detectInstalledEmulators()
+                                        }
+                                        installedEmulators = detected
+                                        isLoadingEmulators = false
+                                        Log.d("SaveState", "Detected ${detected.size} emulators")
+                                    }
+                                }
+                                return@MainScreen
                             }
                             
-                            installedEmulators = detected
-                            isLoadingEmulators = false
+                            // Start scanning for emulators
+                            showEmulatorDialog = true
+                            isLoadingEmulators = true
                             
-                            Log.d("SaveState", "Detected ${detected.size} emulators: ${detected.map { it.displayName }}")
-                        }
-                    },
-                    onSettingsClick = { /* TODO: Navigate to settings */ },
-                    onThemeToggle = { isDarkTheme = !isDarkTheme },
-                    isDarkTheme = isDarkTheme,
-                    appVersion = "1.0"
-                )
+                            coroutineScope.launch {
+                                // Small delay for UI feedback
+                                delay(300)
+                                
+                                // Detect emulators on background thread
+                                val detected = withContext(Dispatchers.IO) {
+                                    emulatorDetector.detectInstalledEmulators()
+                                }
+                                
+                                installedEmulators = detected
+                                isLoadingEmulators = false
+                                
+                                Log.d("SaveState", "Detected ${detected.size} emulators: ${detected.map { it.displayName }}")
+                            }
+                        },
+                        onSettingsClick = { showSettingsScreen = true },
+                        onThemeToggle = { isDarkTheme = !isDarkTheme },
+                        isDarkTheme = isDarkTheme,
+                        appVersion = "1.0"
+                    )
+                }
                 
                 // Emulator selection dialog
                 if (showEmulatorDialog) {
