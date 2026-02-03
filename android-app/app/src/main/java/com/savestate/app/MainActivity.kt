@@ -16,6 +16,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.documentfile.provider.DocumentFile
 import com.savestate.app.data.BackupDirectoryInfo
+import com.savestate.app.data.BackupInfo
+import com.savestate.app.data.BackupManager
 import com.savestate.app.data.EmulatorDetector
 import com.savestate.app.data.GameScanner
 import com.savestate.app.data.SettingsManager
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var emulatorDetector: EmulatorDetector
     private lateinit var gameScanner: GameScanner
     private lateinit var settingsManager: SettingsManager
+    private lateinit var backupManager: BackupManager
     
     // Callback to run after storage permission is granted
     private var onStoragePermissionGranted: (() -> Unit)? = null
@@ -120,6 +123,7 @@ class MainActivity : ComponentActivity() {
         emulatorDetector = EmulatorDetector(applicationContext)
         gameScanner = GameScanner()
         settingsManager = SettingsManager(applicationContext)
+        backupManager = BackupManager(applicationContext, settingsManager)
         
         // Ensure backup directory exists on startup
         settingsManager.ensureBackupDirectoryExists()
@@ -153,6 +157,9 @@ class MainActivity : ComponentActivity() {
                 var backupInfo by remember { mutableStateOf<BackupDirectoryInfo?>(null) }
                 var isMigrating by remember { mutableStateOf(false) }
                 var migrationProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+                
+                // Backup operation state
+                var isBackingUp by remember { mutableStateOf(false) }
                 
                 // Load backup info on startup
                 LaunchedEffect(currentBackupPath) {
@@ -284,7 +291,66 @@ class MainActivity : ComponentActivity() {
                             profiles = profiles.filter { it.id != id }
                             if (selectedProfileId == id) selectedProfileId = null
                         },
-                        onBackupClick = { /* TODO: Implement backup */ },
+                        onBackupClick = {
+                            // Find the selected profile
+                            val selectedProfile = profiles.find { it.id == selectedProfileId }
+                            if (selectedProfile == null) {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Please select a profile first",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@MainScreen
+                            }
+                            
+                            // Avoid duplicate backups
+                            if (isBackingUp) {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Backup already in progress...",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@MainScreen
+                            }
+                            
+                            // Start backup
+                            isBackingUp = true
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Starting backup for ${selectedProfile.name}...",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            
+                            coroutineScope.launch {
+                                val result = backupManager.performBackup(
+                                    profile = selectedProfile,
+                                    maxBackups = 3 // TODO: Get from settings
+                                )
+                                
+                                // Update profile with new backup count/date
+                                if (result.success) {
+                                    val (count, lastDate) = backupManager.getBackupStats(selectedProfile)
+                                    profiles = profiles.map { p ->
+                                        if (p.id == selectedProfile.id) {
+                                            p.copy(
+                                                backupCount = count,
+                                                lastBackup = lastDate?.let {
+                                                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(it)
+                                                }
+                                            )
+                                        } else p
+                                    }
+                                }
+                                
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    result.message,
+                                    if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                                ).show()
+                                
+                                isBackingUp = false
+                            }
+                        },
                         onRestoreClick = { /* TODO: Implement restore */ },
                         onManageBackupsClick = { /* TODO: Show manage backups dialog */ },
                         onNewProfileClick = { 
