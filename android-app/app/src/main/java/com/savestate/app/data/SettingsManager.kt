@@ -1,173 +1,297 @@
 package com.savestate.app.data
 
 import android.content.Context
-import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 /**
- * Manages application settings including backup path.
- * Uses SharedPreferences for persistence.
+ * Manages application settings.
+ * Settings are stored in the external folder (via SAF) when configured.
  */
-class SettingsManager(private val context: Context) {
+class SettingsManager(
+    private val context: Context,
+    private val configManager: ConfigManager
+) {
     
     companion object {
         private const val TAG = "SettingsManager"
-        private const val PREFS_NAME = "savestate_settings"
-        private const val KEY_BACKUP_PATH = "backup_path"
-        
-        // Default backup folder name inside app's private directory
-        private const val DEFAULT_BACKUP_FOLDER = "GameSaveBackups"
+        private const val SETTINGS_FILE = "settings.json"
+        private const val KEY_MAX_BACKUPS = "maxBackups"
+        private const val DEFAULT_MAX_BACKUPS = 5
     }
     
-    private val prefs: SharedPreferences by lazy {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    }
+    // Fallback internal file
+    private val internalSettingsFile: File
+        get() = File(context.filesDir, SETTINGS_FILE)
     
     /**
-     * Gets the default backup path (app's private external files directory).
-     * This path doesn't require any special permissions.
+     * Gets the backup base folder URI from ConfigManager.
      */
-    fun getDefaultBackupPath(): String {
-        // Use external files directory if available, otherwise internal
-        val externalDir = context.getExternalFilesDir(null)
-        val baseDir = externalDir ?: context.filesDir
-        return File(baseDir, DEFAULT_BACKUP_FOLDER).absolutePath
+    fun getBackupUri(): Uri? {
+        return configManager.getBaseUri()
     }
     
     /**
-     * Gets the current backup path.
-     * If not set, returns and initializes the default path.
+     * Gets the display path for UI.
      */
     fun getBackupPath(): String {
-        val savedPath = prefs.getString(KEY_BACKUP_PATH, null)
+        return configManager.getBasePath() ?: "Not configured"
+    }
+    
+    /**
+     * Checks if backup folder is configured.
+     */
+    fun isBackupConfigured(): Boolean {
+        return configManager.isConfigured() && configManager.hasValidPermission()
+    }
+    
+    /**
+     * Gets the DocumentFile for the backup folder.
+     */
+    fun getBackupDocumentFile(): DocumentFile? {
+        return configManager.getBaseDocumentFile()
+    }
+    
+    /**
+     * Gets max backup count setting.
+     */
+    fun getMaxBackups(): Int {
+        return try {
+            val json = readSettingsJson() ?: return DEFAULT_MAX_BACKUPS
+            val obj = JSONObject(json)
+            obj.optInt(KEY_MAX_BACKUPS, DEFAULT_MAX_BACKUPS)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading max backups: ${e.message}", e)
+            DEFAULT_MAX_BACKUPS
+        }
+    }
+    
+    /**
+     * Sets max backup count.
+     */
+    fun setMaxBackups(count: Int) {
+        try {
+            val json = readSettingsJson() ?: "{}"
+            val obj = JSONObject(json)
+            obj.put(KEY_MAX_BACKUPS, count)
+            writeSettingsJson(obj.toString(2))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving max backups: ${e.message}", e)
+        }
+    }
+    
+    private fun readSettingsJson(): String? {
+        val baseDoc = configManager.getBaseDocumentFile()
         
-        if (savedPath != null) {
-            return savedPath
+        if (baseDoc != null && baseDoc.exists()) {
+            val settingsDoc = baseDoc.findFile(SETTINGS_FILE)
+            if (settingsDoc != null && settingsDoc.exists()) {
+                return try {
+                    context.contentResolver.openInputStream(settingsDoc.uri)?.use { input ->
+                        input.bufferedReader().readText()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error reading from external: ${e.message}", e)
+                    null
+                }
+            }
         }
         
-        // Initialize with default path
-        val defaultPath = getDefaultBackupPath()
-        ensureBackupDirectoryExists(defaultPath)
-        saveBackupPath(defaultPath)
-        return defaultPath
+        // Fallback to internal
+        if (internalSettingsFile.exists()) {
+            return internalSettingsFile.readText()
+        }
+        
+        return null
     }
     
-    /**
-     * Saves a new backup path to preferences.
-     */
-    fun saveBackupPath(path: String) {
-        prefs.edit().putString(KEY_BACKUP_PATH, path).apply()
-        Log.d(TAG, "Saved backup path: $path")
-    }
-    
-    /**
-     * Ensures the backup directory exists.
-     * Creates it if necessary.
-     */
-    fun ensureBackupDirectoryExists(path: String = getBackupPath()): Boolean {
-        val dir = File(path)
-        return if (!dir.exists()) {
-            val created = dir.mkdirs()
-            Log.d(TAG, "Created backup directory: $path, success: $created")
-            created
+    private fun writeSettingsJson(json: String): Boolean {
+        val baseDoc = configManager.getBaseDocumentFile()
+        
+        if (baseDoc != null && baseDoc.exists() && baseDoc.canWrite()) {
+            return try {
+                var settingsDoc = baseDoc.findFile(SETTINGS_FILE)
+                if (settingsDoc == null) {
+                    settingsDoc = baseDoc.createFile("application/json", SETTINGS_FILE)
+                }
+                
+                if (settingsDoc != null) {
+                    context.contentResolver.openOutputStream(settingsDoc.uri, "wt")?.use { output ->
+                        output.write(json.toByteArray())
+                    }
+                    true
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error writing to external: ${e.message}", e)
+                false
+            }
         } else {
-            true
+            return try {
+                internalSettingsFile.writeText(json)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error writing to internal: ${e.message}", e)
+                false
+            }
         }
     }
     
     /**
-     * Changes the backup path and migrates all existing files.
-     * @param newPath The new backup path
-     * @param onProgress Callback for progress updates (copied, total)
-     * @return Result with number of files migrated or error
+     * Migrate all data to new external folder.
+     * Called when user selects a new backup folder.
      */
-    suspend fun changeBackupPath(
-        newPath: String,
+    suspend fun migrateToNewFolder(
+        newUri: Uri,
+        displayPath: String,
         onProgress: ((Int, Int) -> Unit)? = null
     ): Result<Int> = withContext(Dispatchers.IO) {
         try {
-            val oldPath = getBackupPath()
+            Log.d(TAG, "Starting migration to: $displayPath")
             
-            // Same path, nothing to do
-            if (oldPath == newPath) {
-                return@withContext Result.success(0)
-            }
-            
-            val oldDir = File(oldPath)
-            val newDir = File(newPath)
-            
-            // Create new directory if needed
-            if (!newDir.exists()) {
-                if (!newDir.mkdirs()) {
-                    return@withContext Result.failure(
-                        Exception("Cannot create directory: $newPath")
-                    )
-                }
-            }
-            
-            // Check if new directory is writable
-            if (!newDir.canWrite()) {
+            val newDoc = DocumentFile.fromTreeUri(context, newUri)
+            if (newDoc == null || !newDoc.exists() || !newDoc.canWrite()) {
                 return@withContext Result.failure(
-                    Exception("Cannot write to directory: $newPath")
+                    Exception("Cannot access the selected folder")
                 )
             }
             
-            // Get all files to migrate
-            val filesToMigrate = if (oldDir.exists()) {
-                oldDir.walkTopDown().filter { it.isFile }.toList()
-            } else {
-                emptyList()
+            // Get old data
+            val oldBaseDoc = configManager.getBaseDocumentFile()
+            var filesMigrated = 0
+            var totalFiles = 0
+            
+            // Count files to migrate
+            if (oldBaseDoc != null && oldBaseDoc.exists()) {
+                totalFiles = oldBaseDoc.listFiles().count { it.isFile }
+            }
+            // Also count internal files
+            val internalFiles = context.filesDir.listFiles()?.filter { 
+                it.name.endsWith(".json") && it.name != "config.json" 
+            } ?: emptyList()
+            totalFiles += internalFiles.size
+            
+            Log.d(TAG, "Total files to migrate: $totalFiles")
+            
+            // Migrate from old external folder
+            if (oldBaseDoc != null && oldBaseDoc.exists()) {
+                for (file in oldBaseDoc.listFiles()) {
+                    if (file.isFile) {
+                        try {
+                            // Read content
+                            val content = context.contentResolver.openInputStream(file.uri)?.use { 
+                                it.readBytes() 
+                            }
+                            
+                            if (content != null) {
+                                // Create in new location
+                                val newFile = newDoc.createFile(
+                                    file.type ?: "application/octet-stream",
+                                    file.name ?: "unknown"
+                                )
+                                
+                                if (newFile != null) {
+                                    context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+                                        output.write(content)
+                                    }
+                                    filesMigrated++
+                                    onProgress?.invoke(filesMigrated, totalFiles)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error migrating file ${file.name}: ${e.message}")
+                        }
+                    } else if (file.isDirectory) {
+                        // Migrate directory (for backup folders)
+                        migrateDirectory(file, newDoc, onProgress) { filesMigrated++; onProgress?.invoke(filesMigrated, totalFiles) }
+                    }
+                }
             }
             
-            val totalFiles = filesToMigrate.size
-            var copiedFiles = 0
-            
-            Log.d(TAG, "Migrating $totalFiles files from $oldPath to $newPath")
-            
-            // Copy each file maintaining directory structure
-            for (file in filesToMigrate) {
-                val relativePath = file.relativeTo(oldDir).path
-                val destFile = File(newDir, relativePath)
-                
-                // Create parent directories if needed
-                destFile.parentFile?.mkdirs()
-                
-                // Copy file
-                file.copyTo(destFile, overwrite = true)
-                copiedFiles++
-                
-                onProgress?.invoke(copiedFiles, totalFiles)
+            // Migrate internal files (if any)
+            for (file in internalFiles) {
+                try {
+                    val content = file.readBytes()
+                    val newFile = newDoc.createFile("application/json", file.name)
+                    
+                    if (newFile != null) {
+                        context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+                            output.write(content)
+                        }
+                        file.delete() // Remove from internal after migration
+                        filesMigrated++
+                        onProgress?.invoke(filesMigrated, totalFiles)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error migrating internal file ${file.name}: ${e.message}")
+                }
             }
             
-            // Delete old files after successful copy
-            if (copiedFiles == totalFiles && oldDir.exists()) {
-                oldDir.deleteRecursively()
-                Log.d(TAG, "Deleted old backup directory: $oldPath")
-            }
+            // Save new config
+            configManager.takePersistentPermission(newUri)
+            configManager.saveBaseUri(newUri, displayPath)
             
-            // Save new path
-            saveBackupPath(newPath)
-            
-            Log.d(TAG, "Migration complete. Moved $copiedFiles files.")
-            Result.success(copiedFiles)
+            Log.d(TAG, "Migration complete. Moved $filesMigrated files.")
+            Result.success(filesMigrated)
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error migrating backup path: ${e.message}", e)
+            Log.e(TAG, "Error during migration: ${e.message}", e)
             Result.failure(e)
         }
     }
     
+    private fun migrateDirectory(
+        sourceDir: DocumentFile,
+        destParent: DocumentFile,
+        onProgress: ((Int, Int) -> Unit)?,
+        onFileMigrated: () -> Unit
+    ) {
+        try {
+            // Create directory in destination
+            val newDir = destParent.createDirectory(sourceDir.name ?: return) ?: return
+            
+            for (file in sourceDir.listFiles()) {
+                if (file.isFile) {
+                    val content = context.contentResolver.openInputStream(file.uri)?.use { 
+                        it.readBytes() 
+                    }
+                    
+                    if (content != null) {
+                        val newFile = newDir.createFile(
+                            file.type ?: "application/octet-stream",
+                            file.name ?: "unknown"
+                        )
+                        
+                        if (newFile != null) {
+                            context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+                                output.write(content)
+                            }
+                            onFileMigrated()
+                        }
+                    }
+                } else if (file.isDirectory) {
+                    migrateDirectory(file, newDir, onProgress, onFileMigrated)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error migrating directory ${sourceDir.name}: ${e.message}")
+        }
+    }
+    
     /**
-     * Gets info about the current backup directory.
+     * Gets info about the backup directory.
      */
     fun getBackupDirectoryInfo(): BackupDirectoryInfo {
-        val path = getBackupPath()
-        val dir = File(path)
+        val baseDoc = configManager.getBaseDocumentFile()
+        val path = configManager.getBasePath() ?: "Not configured"
         
-        if (!dir.exists()) {
+        if (baseDoc == null || !baseDoc.exists()) {
             return BackupDirectoryInfo(
                 path = path,
                 exists = false,
@@ -176,25 +300,28 @@ class SettingsManager(private val context: Context) {
             )
         }
         
-        val files = dir.walkTopDown().filter { it.isFile }.toList()
-        val totalSize = files.sumOf { it.length() }
+        var fileCount = 0
+        var totalSize = 0L
+        
+        fun countFiles(doc: DocumentFile) {
+            for (file in doc.listFiles()) {
+                if (file.isFile) {
+                    fileCount++
+                    totalSize += file.length()
+                } else if (file.isDirectory) {
+                    countFiles(file)
+                }
+            }
+        }
+        
+        countFiles(baseDoc)
         
         return BackupDirectoryInfo(
             path = path,
             exists = true,
-            fileCount = files.size,
+            fileCount = fileCount,
             totalSizeBytes = totalSize
         )
-    }
-    
-    /**
-     * Resets to default backup path and migrates files.
-     */
-    suspend fun resetToDefaultPath(
-        onProgress: ((Int, Int) -> Unit)? = null
-    ): Result<Int> {
-        val defaultPath = getDefaultBackupPath()
-        return changeBackupPath(defaultPath, onProgress)
     }
 }
 
@@ -207,9 +334,6 @@ data class BackupDirectoryInfo(
     val fileCount: Int,
     val totalSizeBytes: Long
 ) {
-    /**
-     * Formatted size string (e.g., "1.5 MB")
-     */
     val formattedSize: String
         get() {
             val kb = totalSizeBytes / 1024.0

@@ -18,8 +18,10 @@ import androidx.documentfile.provider.DocumentFile
 import com.savestate.app.data.BackupDirectoryInfo
 import com.savestate.app.data.BackupInfo
 import com.savestate.app.data.BackupManager
+import com.savestate.app.data.ConfigManager
 import com.savestate.app.data.EmulatorDetector
 import com.savestate.app.data.GameScanner
+import com.savestate.app.data.ProfileRepository
 import com.savestate.app.data.SettingsManager
 import com.savestate.app.data.SfoParser
 import com.savestate.app.data.model.DetectedGame
@@ -43,8 +45,10 @@ class MainActivity : ComponentActivity() {
     
     private lateinit var emulatorDetector: EmulatorDetector
     private lateinit var gameScanner: GameScanner
+    private lateinit var configManager: ConfigManager
     private lateinit var settingsManager: SettingsManager
     private lateinit var backupManager: BackupManager
+    private lateinit var profileRepository: ProfileRepository
     
     // Callback to run after storage permission is granted
     private var onStoragePermissionGranted: (() -> Unit)? = null
@@ -83,15 +87,19 @@ class MainActivity : ComponentActivity() {
         if (uri != null) {
             Log.d("SaveState", "User selected backup folder: $uri")
             
-            // Convert SAF URI to file path for internal storage
-            // Note: For external storage we need to handle differently
-            val path = getPathFromUri(uri)
-            if (path != null) {
-                onBackupPathSelected?.invoke(path)
-            } else {
-                // Fallback to URI string if path resolution fails
-                Toast.makeText(this, "Please select a folder in internal storage", Toast.LENGTH_LONG).show()
+            // Take persistent permission
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (e: Exception) {
+                Log.e("SaveState", "Failed to take persistent permission: ${e.message}")
             }
+            
+            // Get display path for UI
+            val displayPath = getPathFromUri(uri) ?: uri.lastPathSegment ?: "Selected Folder"
+            
+            // Call the migration callback with URI and display path
+            onBackupPathSelected?.invoke(uri.toString() + "|" + displayPath)
         }
     }
     
@@ -123,11 +131,13 @@ class MainActivity : ComponentActivity() {
         // Initialize detectors and managers
         emulatorDetector = EmulatorDetector(applicationContext)
         gameScanner = GameScanner()
-        settingsManager = SettingsManager(applicationContext)
+        configManager = ConfigManager(applicationContext)
+        settingsManager = SettingsManager(applicationContext, configManager)
         backupManager = BackupManager(applicationContext, settingsManager)
+        profileRepository = ProfileRepository(applicationContext, configManager)
         
-        // Ensure backup directory exists on startup
-        settingsManager.ensureBackupDirectoryExists()
+        // Load saved profiles
+        val savedProfiles = profileRepository.loadProfiles()
         
         setContent {
             SaveStateTheme {
@@ -145,10 +155,10 @@ class MainActivity : ComponentActivity() {
                 // Coroutine scope for background operations
                 val coroutineScope = rememberCoroutineScope()
                 
-                // Profile state - start with empty list (no demo data)
+                // Profile state - load from disk
                 var selectedProfileId by remember { mutableStateOf<String?>(null) }
                 var isDarkTheme by remember { mutableStateOf(true) }
-                var profiles by remember { mutableStateOf<List<GameProfile>>(emptyList()) }
+                var profiles by remember { mutableStateOf(savedProfiles) }
                 
                 // Navigation state
                 var showSettingsScreen by remember { mutableStateOf(false) }
@@ -171,6 +181,20 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(currentBackupPath) {
                     backupInfo = withContext(Dispatchers.IO) {
                         settingsManager.getBackupDirectoryInfo()
+                    }
+                }
+                
+                // Check if backup folder is configured on startup
+                LaunchedEffect(Unit) {
+                    if (!configManager.isConfigured()) {
+                        // Show message and open settings
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Please select a backup folder in Settings",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        delay(500)
+                        showSettingsScreen = true
                     }
                 }
                 
@@ -213,73 +237,61 @@ class MainActivity : ComponentActivity() {
                         onBackClick = { showSettingsScreen = false },
                         onBrowseBackupPath = {
                             // Setup callback for when user selects a folder
-                            onBackupPathSelected = { newPath ->
-                                // Start migration
-                                isMigrating = true
-                                migrationProgress = null
+                            onBackupPathSelected = { pathData ->
+                                // Parse URI and display path (separated by |)
+                                val parts = pathData.split("|", limit = 2)
+                                val uriString = parts[0]
+                                val displayPath = parts.getOrElse(1) { "Selected Folder" }
+                                val uri = Uri.parse(uriString)
                                 
-                                coroutineScope.launch {
-                                    val result = settingsManager.changeBackupPath(newPath) { current, total ->
-                                        migrationProgress = Pair(current, total)
-                                    }
-                                    
-                                    result.onSuccess { count ->
-                                        currentBackupPath = settingsManager.getBackupPath()
-                                        backupInfo = withContext(Dispatchers.IO) {
-                                            settingsManager.getBackupDirectoryInfo()
-                                        }
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Moved $count files to new location",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }.onFailure { error ->
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Error: ${error.message}",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                    
-                                    isMigrating = false
-                                    migrationProgress = null
+                                // Save the config FIRST so we know where to look
+                                configManager.takePersistentPermission(uri)
+                                configManager.saveBaseUri(uri, displayPath)
+                                
+                                // Now try to load existing profiles from this folder
+                                val existingProfiles = profileRepository.loadProfiles()
+                                if (existingProfiles.isNotEmpty()) {
+                                    // Found existing profiles! Load them
+                                    profiles = existingProfiles
+                                    profileRepository.saveProfiles(profiles) // Ensure they're saved
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Loaded ${existingProfiles.size} existing profile(s)!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    // Migrate internal profiles to external (if any)
+                                    profileRepository.migrateToExternal()
                                 }
+                                
+                                // Update UI
+                                currentBackupPath = displayPath
+                                coroutineScope.launch {
+                                    backupInfo = withContext(Dispatchers.IO) {
+                                        settingsManager.getBackupDirectoryInfo()
+                                    }
+                                }
+                                
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Backup folder configured successfully!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                             
                             // Open folder picker
                             settingsFolderPickerLauncher.launch(null)
                         },
                         onResetToDefault = {
-                            // Reset to default path
-                            isMigrating = true
-                            migrationProgress = null
-                            
-                            coroutineScope.launch {
-                                val result = settingsManager.resetToDefaultPath { current, total ->
-                                    migrationProgress = Pair(current, total)
-                                }
-                                
-                                result.onSuccess { count ->
-                                    currentBackupPath = settingsManager.getBackupPath()
-                                    backupInfo = withContext(Dispatchers.IO) {
-                                        settingsManager.getBackupDirectoryInfo()
-                                    }
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Reset to default. Moved $count files.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }.onFailure { error ->
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Error: ${error.message}",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                                
-                                isMigrating = false
-                                migrationProgress = null
-                            }
+                            // Clear the current config
+                            configManager.clearConfig()
+                            currentBackupPath = "Not configured"
+                            backupInfo = null
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Configuration reset. Please select a new backup folder.",
+                                Toast.LENGTH_LONG
+                            ).show()
                         },
                         appVersion = "1.0"
                     )
@@ -292,9 +304,11 @@ class MainActivity : ComponentActivity() {
                             profiles = profiles.map { 
                                 if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it 
                             }
+                            profileRepository.saveProfiles(profiles)
                         },
                         onDeleteProfile = { id ->
                             profiles = profiles.filter { it.id != id }
+                            profileRepository.saveProfiles(profiles)
                             if (selectedProfileId == id) selectedProfileId = null
                         },
                         onBackupClick = {
@@ -346,6 +360,7 @@ class MainActivity : ComponentActivity() {
                                             )
                                         } else p
                                     }
+                                    profileRepository.saveProfiles(profiles)
                                 }
                                 
                                 Toast.makeText(
@@ -484,8 +499,9 @@ class MainActivity : ComponentActivity() {
                             
                             if (!exists) {
                                 profiles = profiles + newProfile
+                                profileRepository.saveProfiles(profiles) // Persist to disk
                                 selectedProfileId = newProfile.id
-                                Log.d("SaveState", "Created new profile: ${game.gameName}")
+                                Log.d("SaveState", "Created and saved profile: ${game.gameName}")
                             } else {
                                 Log.d("SaveState", "Profile already exists for: ${game.gameName}")
                                 // Select the existing profile

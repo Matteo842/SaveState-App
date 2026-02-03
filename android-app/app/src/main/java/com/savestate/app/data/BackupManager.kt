@@ -82,33 +82,44 @@ class BackupManager(
                 )
             }
             
-            // 2. Create backup directory for this profile
-            val backupBaseDir = settingsManager.getBackupPath()
-            val sanitizedName = sanitizeFolderName(profile.name)
-            val profileBackupDir = File(backupBaseDir, sanitizedName)
+            // 2. Get backup directory from settings (SAF)
+            val backupBaseDoc = settingsManager.getBackupDocumentFile()
+            if (backupBaseDoc == null || !backupBaseDoc.exists()) {
+                return@withContext BackupResult(
+                    success = false,
+                    message = "Backup folder not configured.\nPlease select a backup folder in Settings."
+                )
+            }
             
-            if (!profileBackupDir.exists()) {
-                if (!profileBackupDir.mkdirs()) {
-                    return@withContext BackupResult(
-                        success = false,
-                        message = "Cannot create backup directory: ${profileBackupDir.absolutePath}"
-                    )
-                }
+            // Create or get profile backup folder
+            val sanitizedName = sanitizeFolderName(profile.name)
+            var profileBackupDoc = backupBaseDoc.findFile(sanitizedName)
+            if (profileBackupDoc == null) {
+                profileBackupDoc = backupBaseDoc.createDirectory(sanitizedName)
+            }
+            
+            if (profileBackupDoc == null || !profileBackupDoc.exists()) {
+                return@withContext BackupResult(
+                    success = false,
+                    message = "Cannot create backup folder for ${profile.name}"
+                )
             }
             
             // 3. Generate backup filename with timestamp
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val archiveName = "Backup_${sanitizedName}_${timestamp}.zip"
-            val archivePath = File(profileBackupDir, archiveName)
             
-            Log.i(TAG, "Creating backup archive: ${archivePath.absolutePath}")
+            // Create temp file for ZIP (then copy to SAF)
+            val tempFile = File(context.cacheDir, archiveName)
+            
+            Log.i(TAG, "Creating backup archive: $archiveName")
             
             // 4. Calculate total size for progress
             val totalSize = calculateTotalSize(sourceDocument)
             var bytesWritten = 0L
             
-            // 5. Create ZIP archive
-            ZipOutputStream(BufferedOutputStream(FileOutputStream(archivePath))).use { zipOut ->
+            // 5. Create ZIP archive in temp location
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(tempFile))).use { zipOut ->
                 // Set compression level (standard)
                 zipOut.setLevel(Deflater.DEFAULT_COMPRESSION)
                 
@@ -123,10 +134,29 @@ class BackupManager(
                 }
             }
             
-            Log.i(TAG, "Backup archive created successfully: ${archivePath.absolutePath}")
+            // 6. Copy temp ZIP to SAF destination
+            val destZipDoc = profileBackupDoc.createFile("application/zip", archiveName)
+            if (destZipDoc == null) {
+                tempFile.delete()
+                return@withContext BackupResult(
+                    success = false,
+                    message = "Cannot create backup file in storage"
+                )
+            }
             
-            // 6. Manage old backups (rotation)
-            val deletedCount = manageOldBackups(profileBackupDir, maxBackups)
+            context.contentResolver.openOutputStream(destZipDoc.uri)?.use { output ->
+                tempFile.inputStream().use { input ->
+                    input.copyTo(output)
+                }
+            }
+            
+            // Delete temp file
+            tempFile.delete()
+            
+            Log.i(TAG, "Backup archive created successfully: $archiveName")
+            
+            // 7. Manage old backups (rotation)
+            val deletedCount = manageOldBackupsSAF(profileBackupDoc, maxBackups)
             
             val message = buildString {
                 append("Backup completed successfully:\n'$archiveName'")
@@ -138,7 +168,7 @@ class BackupManager(
             BackupResult(
                 success = true,
                 message = message,
-                backupPath = archivePath.absolutePath,
+                backupPath = destZipDoc.uri.toString(),
                 deletedOldBackups = deletedCount
             )
             
@@ -164,26 +194,25 @@ class BackupManager(
      * @return List of backup files sorted by date (newest first)
      */
     fun listBackups(profile: GameProfile): List<BackupInfo> {
-        val backupBaseDir = settingsManager.getBackupPath()
+        val backupBaseDoc = settingsManager.getBackupDocumentFile() ?: return emptyList()
         val sanitizedName = sanitizeFolderName(profile.name)
-        val profileBackupDir = File(backupBaseDir, sanitizedName)
+        val profileBackupDoc = backupBaseDoc.findFile(sanitizedName) ?: return emptyList()
         
-        if (!profileBackupDir.exists() || !profileBackupDir.isDirectory) {
+        if (!profileBackupDoc.isDirectory) {
             return emptyList()
         }
         
-        return profileBackupDir.listFiles()
-            ?.filter { it.isFile && it.name.startsWith("Backup_") && it.name.endsWith(".zip") }
-            ?.map { file ->
+        return profileBackupDoc.listFiles()
+            .filter { it.isFile && (it.name?.startsWith("Backup_") == true) && (it.name?.endsWith(".zip") == true) }
+            .map { file ->
                 BackupInfo(
-                    fileName = file.name,
-                    filePath = file.absolutePath,
+                    fileName = file.name ?: "unknown",
+                    filePath = file.uri.toString(),
                     createdAt = Date(file.lastModified()),
                     sizeBytes = file.length()
                 )
             }
-            ?.sortedByDescending { it.createdAt }
-            ?: emptyList()
+            .sortedByDescending { it.createdAt }
     }
     
     /**
@@ -211,12 +240,23 @@ class BackupManager(
         Log.i(TAG, "Starting restore for profile: '${profile.name}' from: ${backupInfo.fileName}")
         
         try {
-            // 1. Validate backup file exists
-            val backupFile = File(backupInfo.filePath)
-            if (!backupFile.exists() || !backupFile.isFile) {
+            // 1. Validate backup file exists and copy to cache (SAF files need to be copied)
+            val backupUri = Uri.parse(backupInfo.filePath)
+            val tempBackupFile = File(context.cacheDir, "restore_temp.zip")
+            
+            try {
+                context.contentResolver.openInputStream(backupUri)?.use { input ->
+                    tempBackupFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: return@withContext RestoreResult(
+                    success = false,
+                    message = "Cannot read backup file"
+                )
+            } catch (e: Exception) {
                 return@withContext RestoreResult(
                     success = false,
-                    message = "Backup file not found: ${backupInfo.filePath}"
+                    message = "Backup file not accessible: ${e.message}"
                 )
             }
             
@@ -250,7 +290,7 @@ class BackupManager(
             Log.d(TAG, "Extracting to: ${extractTarget.name}")
             
             // 3. Open ZIP and count entries (for progress)
-            val zipFile = ZipFile(backupFile)
+            val zipFile = ZipFile(tempBackupFile)
             val entries = zipFile.entries().toList()
             val fileEntries = entries.filter { !it.isDirectory && !it.name.startsWith("savestate/") }
             val totalFiles = fileEntries.size
@@ -290,6 +330,9 @@ class BackupManager(
             }
             
             zipFile.close()
+            
+            // Clean up temp file
+            tempBackupFile.delete()
             
             Log.i(TAG, "Restore completed: $restoredFiles/$totalFiles files")
             
@@ -383,8 +426,9 @@ class BackupManager(
      */
     fun deleteBackup(backupInfo: BackupInfo): Boolean {
         return try {
-            val file = File(backupInfo.filePath)
-            val deleted = file.delete()
+            val uri = Uri.parse(backupInfo.filePath)
+            val docFile = DocumentFile.fromSingleUri(context, uri)
+            val deleted = docFile?.delete() ?: false
             Log.d(TAG, "Deleted backup ${backupInfo.fileName}: $deleted")
             deleted
         } catch (e: Exception) {
@@ -541,6 +585,37 @@ class BackupManager(
             ?.filter { it.isFile && it.name.startsWith("Backup_") && it.name.endsWith(".zip") }
             ?.sortedByDescending { it.lastModified() }
             ?: return 0
+        
+        if (backupFiles.size <= maxBackups) {
+            return 0
+        }
+        
+        var deletedCount = 0
+        backupFiles.drop(maxBackups).forEach { fileToDelete ->
+            try {
+                if (fileToDelete.delete()) {
+                    Log.d(TAG, "Deleted old backup: ${fileToDelete.name}")
+                    deletedCount++
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to delete old backup: ${fileToDelete.name}: ${e.message}")
+            }
+        }
+        
+        return deletedCount
+    }
+    
+    /**
+     * SAF version: Manages old backups by deleting oldest ones when exceeding maxBackups.
+     */
+    private fun manageOldBackupsSAF(profileBackupDoc: DocumentFile, maxBackups: Int): Int {
+        if (maxBackups < 0) {
+            return 0 // Unlimited backups
+        }
+        
+        val backupFiles = profileBackupDoc.listFiles()
+            .filter { it.isFile && (it.name?.startsWith("Backup_") == true) && (it.name?.endsWith(".zip") == true) }
+            .sortedByDescending { it.lastModified() }
         
         if (backupFiles.size <= maxBackups) {
             return 0
