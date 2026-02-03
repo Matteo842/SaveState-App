@@ -44,7 +44,9 @@ The app is now **functional** and can be used to:
 
 ## 📸 Screenshots
 
-![Screenshot](images/Screenshot.png)
+<p align="center">
+  <img src="images/Screenshot.png" alt="SaveState App Screenshot" width="300">
+</p>
 
 ## ⬇️ Download
 
