@@ -1,36 +1,116 @@
-# SaveState - Android App (Concept / UI Test)
+# SaveState - Android App
 
-> ⚠️ **DISCLAIMER: WORK IN PROGRESS / PROTOTYPE**
-> This repository currently serves **ONLY** as a UI/UX design playground. It is **NOT** a functional application yet.
+<div align="center">
 
-## 📱 About This Project
-This is an experimental repository exploring a potential Android companion/port for the main **SaveState** project.
+**Backup & Restore your emulator save files on Android**
 
-Given the interest shown by the community, I am making this repository public to share the progress on the visual interface. However, please note that this is strictly a **Proof of Concept (PoC)** to test Material Design 3 implementation and layout ideas for game save management.
+[![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
+[![API](https://img.shields.io/badge/API-26%2B-brightgreen.svg)](https://android-arsenal.com/api?level=26)
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 
-**Current Status:** `Pre-Alpha / UI Only`
+</div>
 
-## 🛑 Important Note for Users & Developers
-**Please do NOT attempt to build, run, or install this application expecting functionality.**
-
-* The code currently contains **no backend logic**.
-* The build environment is set up for local UI testing only.
-* Buttons and menus are visual placeholders.
-
-**I strongly discourage cloning this repo to "try it out" at this stage.** You will likely encounter build errors or a non-responsive interface.
-
-## 🎨 Current UI Goals
-The aim is to create a clean, modern interface for managing emulator save states (Citra, Dolphin, DuckStation, Flycast, etc.).
-
-* **Material Design 3:** Utilizing modern Android components.
-* **Dark Mode:** Native dark theme support.
-* **Emulator Cards:** Visual layout for different emulator profiles.
-![Screenshot](images/Screenshot.png)
-
-## 📅 Roadmap
-There is **no estimated timeline (ETA)** for a functional release. Development is happening sporadically as a feasibility study.
-
-Please stick to the main SaveState repository for the stable, working CLI tools.
+> 🖥️ **Looking for the Desktop/PC version?** Check out [SaveState for Windows](https://github.com/Matteo842/SaveState)
 
 ---
-*Created by [Matteo842](https://github.com/Matteo842)*
+
+## 📱 About
+
+**SaveState App** is an Android application designed to backup and restore save files from **emulators**. Unlike the desktop version which targets PC games in general, this mobile app is specifically built for the Android emulator ecosystem.
+
+### Current Status: `Pre-Release Alpha (v0.1)`
+
+The app is now **functional** and can be used to:
+- ✅ Detect installed emulators
+- ✅ Scan for game saves
+- ✅ Create compressed backups (.zip)
+- ✅ Restore saves from backups
+- ✅ Manage multiple game profiles
+- ✅ Persist data across app reinstalls (when using external storage)
+
+## 🎮 Supported Emulators
+
+| Emulator | Platform | Status |
+|----------|----------|--------|
+| **PPSSPP** | PSP | ✅ Supported |
+| Citra | 3DS | 🔜 Coming Soon |
+| Dolphin | GameCube/Wii | 🔜 Coming Soon |
+| DuckStation | PS1 | 🔜 Coming Soon |
+| AetherSX2 | PS2 | 🔜 Coming Soon |
+| Flycast | Dreamcast | 🔜 Coming Soon |
+| ePSXe | PS1 | 🔜 Coming Soon |
+
+> More emulators will be added in future releases!
+
+## 📸 Screenshots
+
+![Screenshot](images/Screenshot.png)
+
+## ⬇️ Download
+
+Check the [Releases](https://github.com/Matteo842/SaveState-App/releases) page for APK downloads.
+
+> ⚠️ **Note:** Current releases are pre-release builds. Some features may be incomplete or unstable.
+
+## 🚀 Getting Started
+
+1. **Install the APK** from the Releases page
+2. **Select a backup folder** when prompted (this is where your backups will be stored)
+3. **Add a profile** by clicking the + button
+4. **Select your emulator** (PPSSPP)
+5. **Choose a game** from the detected saves
+6. **Backup** your saves with one tap!
+
+### Data Persistence
+Your profiles and backups are saved to the folder you select. This means:
+- ✅ Backups survive app uninstallation
+- ✅ Reinstall the app and select the same folder to restore everything
+- ✅ You control where your data is stored
+
+## 🛠️ Building from Source
+
+### Requirements
+- Android Studio Hedgehog or newer
+- JDK 17+
+- Android SDK 34
+
+### Build Steps
+```bash
+git clone https://github.com/Matteo842/SaveState-App.git
+cd SaveState-App/android-app
+./gradlew assembleDebug
+```
+
+The APK will be generated in `app/build/outputs/apk/debug/`
+
+## 🗺️ Roadmap
+
+- [ ] Support for more emulators (Citra, Dolphin, DuckStation, etc.)
+- [ ] Auto-backup scheduling
+- [ ] Cloud backup integration (Google Drive, OneDrive)
+- [ ] Import/Export profiles
+- [ ] Backup compression options
+- [ ] Multi-language support
+
+## 🤝 Contributing
+
+Feedback is welcome! Feel free to:
+- Report bugs via [Issues](https://github.com/Matteo842/SaveState-App/issues)
+- Suggest new features or emulator support
+- Share your experience with the app
+
+> ⚠️ **Note:** This project is developed with AI assistance. Due to this, I'm currently **not accepting pull requests** for code changes, as reviewing external code contributions is beyond my capacity. Thank you for understanding!
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+**Created by [Matteo842](https://github.com/Matteo842)**
+
+⭐ Star this repo if you find it useful!
+
+</div>
