@@ -10,12 +10,15 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
@@ -190,6 +193,224 @@ class BackupManager(
         val backups = listBackups(profile)
         return Pair(backups.size, backups.firstOrNull()?.createdAt)
     }
+    
+    /**
+     * Performs a restore from a backup archive.
+     * 
+     * @param profile The game profile to restore
+     * @param backupInfo The backup to restore from
+     * @param onProgress Optional callback for progress updates (filesRestored, totalFiles)
+     * @return RestoreResult with success status and details
+     */
+    suspend fun performRestore(
+        profile: GameProfile,
+        backupInfo: BackupInfo,
+        onProgress: ((Int, Int) -> Unit)? = null
+    ): RestoreResult = withContext(Dispatchers.IO) {
+        
+        Log.i(TAG, "Starting restore for profile: '${profile.name}' from: ${backupInfo.fileName}")
+        
+        try {
+            // 1. Validate backup file exists
+            val backupFile = File(backupInfo.filePath)
+            if (!backupFile.exists() || !backupFile.isFile) {
+                return@withContext RestoreResult(
+                    success = false,
+                    message = "Backup file not found: ${backupInfo.filePath}"
+                )
+            }
+            
+            // 2. Get the PARENT folder where we extract to
+            // profile.parentPath points to: SAVEDATA (where we have SAF permissions)
+            // profile.savePath points to: SAVEDATA/UCUS98653DATA00 (may not exist)
+            // We extract to parentPath, and ZIP structure (UCUS98653DATA00/...) is preserved
+            
+            val extractTarget: DocumentFile?
+            
+            if (profile.parentPath != null) {
+                // Use stored parent path (preferred - we have permissions on this)
+                val parentUri = Uri.parse(profile.parentPath)
+                extractTarget = DocumentFile.fromTreeUri(context, parentUri)
+                Log.d(TAG, "Using stored parentPath: ${profile.parentPath}")
+            } else {
+                // Fallback: try to get parent from savePath (may fail if folder deleted)
+                val destUri = Uri.parse(profile.savePath)
+                val saveDocument = DocumentFile.fromTreeUri(context, destUri)
+                extractTarget = saveDocument?.parentFile ?: saveDocument
+                Log.w(TAG, "No parentPath stored, trying fallback")
+            }
+            
+            if (extractTarget == null || !extractTarget.exists()) {
+                return@withContext RestoreResult(
+                    success = false,
+                    message = "Cannot access save folder.\nPlease delete this profile and re-add it."
+                )
+            }
+            
+            Log.d(TAG, "Extracting to: ${extractTarget.name}")
+            
+            // 3. Open ZIP and count entries (for progress)
+            val zipFile = ZipFile(backupFile)
+            val entries = zipFile.entries().toList()
+            val fileEntries = entries.filter { !it.isDirectory && !it.name.startsWith("savestate/") }
+            val totalFiles = fileEntries.size
+            var restoredFiles = 0
+            
+            Log.d(TAG, "ZIP contains ${entries.size} entries, ${fileEntries.size} files to restore")
+            
+            // 4. Extract files to parent with FULL path structure
+            // ZIP has: UCUS98653DATA00/PARAM.SFO
+            // We extract to: SAVEDATA/UCUS98653DATA00/PARAM.SFO
+            // This recreates the folder if it was deleted!
+            for (entry in fileEntries) {
+                try {
+                    // Skip manifest
+                    if (entry.name.startsWith("savestate/")) continue
+                    
+                    // Security check: prevent path traversal
+                    if (entry.name.contains("..")) {
+                        Log.w(TAG, "Skipping unsafe path: ${entry.name}")
+                        continue
+                    }
+                    
+                    // Keep FULL path - this includes the game folder name
+                    val pathParts = entry.name.split("/").filter { it.isNotEmpty() }
+                    
+                    if (pathParts.isEmpty()) continue
+                    
+                    // Extract with complete path structure
+                    copyZipEntryWithPath(zipFile, entry, extractTarget, pathParts)
+                    
+                    restoredFiles++
+                    onProgress?.invoke(restoredFiles, totalFiles)
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error restoring entry ${entry.name}: ${e.message}", e)
+                }
+            }
+            
+            zipFile.close()
+            
+            Log.i(TAG, "Restore completed: $restoredFiles/$totalFiles files")
+            
+            RestoreResult(
+                success = true,
+                message = "Restore completed successfully!\n$restoredFiles file(s) restored from:\n'${backupInfo.fileName}'"
+            )
+            
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Security error during restore: ${e.message}", e)
+            RestoreResult(
+                success = false,
+                message = "Permission denied: Cannot write to save folder.\nPlease re-select the save folder."
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during restore: ${e.message}", e)
+            RestoreResult(
+                success = false,
+                message = "Restore failed: ${e.message}"
+            )
+        }
+    }
+    
+    /**
+     * Copies a ZIP entry to a DocumentFile destination.
+     */
+    private fun copyZipEntryToDocument(
+        zipFile: ZipFile,
+        entry: java.util.zip.ZipEntry,
+        destDocument: DocumentFile,
+        fileName: String
+    ) {
+        // Create or overwrite the file
+        var existingFile = destDocument.findFile(fileName)
+        if (existingFile != null) {
+            existingFile.delete()
+        }
+        
+        val mimeType = getMimeType(fileName)
+        val newFile = destDocument.createFile(mimeType, fileName)
+            ?: throw Exception("Cannot create file: $fileName")
+        
+        // Copy content
+        zipFile.getInputStream(entry).use { input ->
+            context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+                val buffer = ByteArray(BUFFER_SIZE)
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                }
+            }
+        }
+        
+        Log.d(TAG, "Restored file: $fileName")
+    }
+    
+    /**
+     * Copies a ZIP entry to a nested path in DocumentFile, creating folders as needed.
+     */
+    private fun copyZipEntryWithPath(
+        zipFile: ZipFile,
+        entry: java.util.zip.ZipEntry,
+        destDocument: DocumentFile,
+        pathParts: List<String>
+    ) {
+        if (pathParts.isEmpty()) return
+        
+        // Navigate/create folders except for the last part (which is the file)
+        var currentFolder = destDocument
+        for (i in 0 until pathParts.size - 1) {
+            val folderName = pathParts[i]
+            var childFolder = currentFolder.findFile(folderName)
+            
+            if (childFolder == null || !childFolder.isDirectory) {
+                // Create folder
+                childFolder = currentFolder.createDirectory(folderName)
+                    ?: throw Exception("Cannot create directory: $folderName")
+                Log.d(TAG, "Created directory: $folderName")
+            }
+            
+            currentFolder = childFolder
+        }
+        
+        // Copy the file to the final folder
+        val fileName = pathParts.last()
+        copyZipEntryToDocument(zipFile, entry, currentFolder, fileName)
+    }
+    
+    /**
+     * Deletes a backup file.
+     */
+    fun deleteBackup(backupInfo: BackupInfo): Boolean {
+        return try {
+            val file = File(backupInfo.filePath)
+            val deleted = file.delete()
+            Log.d(TAG, "Deleted backup ${backupInfo.fileName}: $deleted")
+            deleted
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting backup: ${e.message}", e)
+            false
+        }
+    }
+    
+    /**
+     * Gets MIME type for a file based on extension.
+     */
+    private fun getMimeType(fileName: String): String {
+        val extension = fileName.substringAfterLast(".", "")
+        return when (extension.lowercase()) {
+            "sfo" -> "application/octet-stream"
+            "bin" -> "application/octet-stream"
+            "dat" -> "application/octet-stream"
+            "sav" -> "application/octet-stream"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "txt" -> "text/plain"
+            "json" -> "application/json"
+            else -> "application/octet-stream"
+        }
+    }
+
     
     /**
      * Sanitizes a folder name by removing/replacing invalid characters.

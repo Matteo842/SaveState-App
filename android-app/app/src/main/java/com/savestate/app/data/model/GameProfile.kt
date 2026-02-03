@@ -8,7 +8,8 @@ data class GameProfile(
     val id: String,
     val name: String,
     val emulator: String,
-    val savePath: String,
+    val savePath: String,           // URI to specific game save folder (e.g., UCUS98653DATA00)
+    val parentPath: String? = null, // URI to parent folder (e.g., SAVEDATA) - for restore
     val backupCount: Int = 0,
     val lastBackup: String? = null, // Format: "DD/MM/YYYY HH:mm"
     val isFavorite: Boolean = false,

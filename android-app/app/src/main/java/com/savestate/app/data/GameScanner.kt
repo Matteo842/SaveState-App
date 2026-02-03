@@ -229,6 +229,7 @@ class GameScanner {
                         gameId = baseId,
                         gameName = gameName,
                         savePath = primaryPath,
+                        parentPath = saveDataDir.absolutePath, // Store parent folder for restore
                         emulatorType = Emulator.PPSSPP,
                         saveCount = totalSaves,
                         lastModified = latestModified

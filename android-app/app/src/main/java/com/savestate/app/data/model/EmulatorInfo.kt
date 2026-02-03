@@ -21,6 +21,7 @@ data class DetectedGame(
     val gameId: String,          // Unique ID (e.g., folder name like "ULUS10041")
     val gameName: String,        // Display name (e.g., "God of War: Chains of Olympus")
     val savePath: String,        // Full path to the save folder
+    val parentPath: String? = null, // Path to parent folder (e.g., SAVEDATA) - for restore
     val emulatorType: Emulator,
     val saveCount: Int = 0,      // Number of save files found
     val lastModified: Long = 0   // Last modification timestamp

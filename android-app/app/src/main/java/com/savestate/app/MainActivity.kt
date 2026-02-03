@@ -26,6 +26,7 @@ import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorInfo
 import com.savestate.app.data.model.GameProfile
+import com.savestate.app.ui.dialogs.RestoreBackupDialog
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
 import com.savestate.app.ui.screens.MainScreen
@@ -160,6 +161,11 @@ class MainActivity : ComponentActivity() {
                 
                 // Backup operation state
                 var isBackingUp by remember { mutableStateOf(false) }
+                
+                // Restore dialog state
+                var showRestoreDialog by remember { mutableStateOf(false) }
+                var availableBackups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
+                var isRestoring by remember { mutableStateOf(false) }
                 
                 // Load backup info on startup
                 LaunchedEffect(currentBackupPath) {
@@ -351,8 +357,38 @@ class MainActivity : ComponentActivity() {
                                 isBackingUp = false
                             }
                         },
-                        onRestoreClick = { /* TODO: Implement restore */ },
-                        onManageBackupsClick = { /* TODO: Show manage backups dialog */ },
+                        onRestoreClick = {
+                            // Find the selected profile
+                            val selectedProfile = profiles.find { it.id == selectedProfileId }
+                            if (selectedProfile == null) {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Please select a profile first",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@MainScreen
+                            }
+                            
+                            // Load available backups for this profile
+                            availableBackups = backupManager.listBackups(selectedProfile)
+                            showRestoreDialog = true
+                        },
+                        onManageBackupsClick = {
+                            // For now, manage backups just opens the restore dialog
+                            // which also allows deleting backups
+                            val selectedProfile = profiles.find { it.id == selectedProfileId }
+                            if (selectedProfile == null) {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Please select a profile first",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@MainScreen
+                            }
+                            
+                            availableBackups = backupManager.listBackups(selectedProfile)
+                            showRestoreDialog = true
+                        },
                         onNewProfileClick = { 
                             // Check storage permission first
                             if (!hasStoragePermission()) {
@@ -434,6 +470,7 @@ class MainActivity : ComponentActivity() {
                                 name = game.gameName,
                                 emulator = selectedEmulator!!.emulatorType.displayName,
                                 savePath = game.savePath,
+                                parentPath = game.parentPath, // Store parent for restore
                                 backupCount = 0,
                                 lastBackup = null,
                                 isFavorite = false
@@ -470,6 +507,82 @@ class MainActivity : ComponentActivity() {
                             isLoadingGames = false
                             selectedEmulator = null
                             detectedGames = emptyList()
+                        }
+                    )
+                }
+                
+                // Restore backup dialog
+                if (showRestoreDialog) {
+                    val selectedProfile = profiles.find { it.id == selectedProfileId }
+                    RestoreBackupDialog(
+                        profileName = selectedProfile?.name ?: "",
+                        backups = availableBackups,
+                        isRestoring = isRestoring,
+                        onRestore = { backupInfo ->
+                            if (selectedProfile == null) {
+                                showRestoreDialog = false
+                                return@RestoreBackupDialog
+                            }
+                            
+                            isRestoring = true
+                            
+                            coroutineScope.launch {
+                                val result = backupManager.performRestore(
+                                    profile = selectedProfile,
+                                    backupInfo = backupInfo
+                                )
+                                
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    result.message,
+                                    if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                                ).show()
+                                
+                                isRestoring = false
+                                
+                                if (result.success) {
+                                    showRestoreDialog = false
+                                }
+                            }
+                        },
+                        onDelete = { backupInfo ->
+                            val deleted = backupManager.deleteBackup(backupInfo)
+                            if (deleted) {
+                                // Refresh backup list
+                                selectedProfile?.let { profile ->
+                                    availableBackups = backupManager.listBackups(profile)
+                                    
+                                    // Update profile stats
+                                    val (count, lastDate) = backupManager.getBackupStats(profile)
+                                    profiles = profiles.map { p ->
+                                        if (p.id == profile.id) {
+                                            p.copy(
+                                                backupCount = count,
+                                                lastBackup = lastDate?.let {
+                                                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(it)
+                                                }
+                                            )
+                                        } else p
+                                    }
+                                }
+                                
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Backup deleted",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Failed to delete backup",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        onDismiss = {
+                            if (!isRestoring) {
+                                showRestoreDialog = false
+                            }
                         }
                     )
                 }
@@ -512,7 +625,7 @@ class MainActivity : ComponentActivity() {
                 
                 // List all items in the folder
                 val children = documentFile.listFiles()
-                Log.d("SaveState", "Found ${children.size} items in folder")
+                Log.d("SaveState", "Found ${children.size} items in SAVEDATA folder")
                 
                 // Group games by base ID
                 val gamesMap = mutableMapOf<String, DetectedGame>()
@@ -521,7 +634,6 @@ class MainActivity : ComponentActivity() {
                     if (!child.isDirectory) continue
                     
                     val folderName = child.name ?: continue
-                    Log.d("SaveState", "Checking folder: $folderName")
                     
                     // Check if it matches PSP save folder pattern
                     var baseGameId: String? = null
@@ -535,7 +647,6 @@ class MainActivity : ComponentActivity() {
                     }
                     
                     if (baseGameId == null) {
-                        Log.d("SaveState", "  Skipping - doesn't match pattern")
                         continue
                     }
                     
@@ -555,10 +666,9 @@ class MainActivity : ComponentActivity() {
                             contentResolver.openInputStream(sfoFile.uri)?.use { inputStream ->
                                 val data = inputStream.readBytes()
                                 gameName = parseSfoFromBytes(data)
-                                Log.d("SaveState", "  Parsed game name: $gameName")
                             }
                         } catch (e: Exception) {
-                            Log.e("SaveState", "  Error parsing SFO: ${e.message}")
+                            Log.w("SaveState", "Error parsing SFO for $folderName: ${e.message}")
                         }
                     }
                     
@@ -568,18 +678,21 @@ class MainActivity : ComponentActivity() {
                     }
                     
                     // Count files
-                    val saveCount = child.listFiles().count { it.isFile }
+                    val saveCount = try {
+                        child.listFiles().count { it.isFile }
+                    } catch (e: Exception) {
+                        0
+                    }
                     
                     gamesMap[baseGameId] = DetectedGame(
                         gameId = baseGameId,
-                        gameName = gameName!!,
+                        gameName = gameName ?: baseGameId,
                         savePath = child.uri.toString(),
+                        parentPath = documentFile.uri.toString(),
                         emulatorType = currentEmulator?.emulatorType ?: Emulator.PPSSPP,
                         saveCount = saveCount,
                         lastModified = child.lastModified()
                     )
-                    
-                    Log.d("SaveState", "  Added game: $gameName")
                 }
                 
                 val games = gamesMap.values.toList()
