@@ -38,7 +38,7 @@ fun MainScreen(
     onSettingsClick: () -> Unit,
     onThemeToggle: () -> Unit,
     isDarkTheme: Boolean = true,
-    appVersion: String = "1.0",
+    appVersion: String = "0.1",
     modifier: Modifier = Modifier
 ) {
     Column(

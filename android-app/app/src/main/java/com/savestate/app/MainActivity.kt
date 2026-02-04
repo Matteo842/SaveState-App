@@ -293,7 +293,7 @@ class MainActivity : ComponentActivity() {
                                 Toast.LENGTH_LONG
                             ).show()
                         },
-                        appVersion = "1.0"
+                        appVersion = "0.1"
                     )
                 } else {
                     MainScreen(
@@ -447,7 +447,7 @@ class MainActivity : ComponentActivity() {
                         onSettingsClick = { showSettingsScreen = true },
                         onThemeToggle = { isDarkTheme = !isDarkTheme },
                         isDarkTheme = isDarkTheme,
-                        appVersion = "1.0"
+                        appVersion = "0.1"
                     )
                 }
                 

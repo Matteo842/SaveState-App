@@ -40,7 +40,7 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onBrowseBackupPath: () -> Unit,
     onResetToDefault: () -> Unit,
-    appVersion: String = "1.0",
+    appVersion: String = "0.1",
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()

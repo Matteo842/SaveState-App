@@ -33,7 +33,7 @@ class BackupManager(
         private const val TAG = "BackupManager"
         private const val MANIFEST_PATH = "savestate/manifest.json"
         private const val BUFFER_SIZE = 8192 // 8KB buffer for file operations
-        private const val APP_VERSION = "1.0" // TODO: Get from BuildConfig
+        private const val APP_VERSION = "0.1" // TODO: Get from BuildConfig
     }
     
     /**

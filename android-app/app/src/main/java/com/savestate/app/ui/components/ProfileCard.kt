@@ -1,5 +1,6 @@
 package com.savestate.app.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,10 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.savestate.app.R
 import com.savestate.app.data.model.GameProfile
 import com.savestate.app.ui.theme.*
 
@@ -28,7 +32,7 @@ import com.savestate.app.ui.theme.*
  * - Alternating row colors
  * - Star for favorites
  * - Delete button on hover/selection
- * - Emulator icon + game name + backup info layout
+ * - Emulator icon + game name layout
  */
 @Composable
 fun ProfileCard(
@@ -75,14 +79,15 @@ fun ProfileCard(
             )
         }
 
-        // Emulator icon placeholder + Profile name
+        // Emulator icon + Profile name
         Row(
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Emulator icon (placeholder circle)
+            // Emulator icon - use actual icon if available
+            val emulatorIconRes = getEmulatorIconResource(profile.emulator)
             Box(
                 modifier = Modifier
                     .size(28.dp)
@@ -90,19 +95,29 @@ fun ProfileCard(
                     .background(DarkSurface),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = profile.emulator.take(2).uppercase(),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextSecondary
-                )
+                if (emulatorIconRes != null) {
+                    Image(
+                        painter = painterResource(id = emulatorIconRes),
+                        contentDescription = profile.emulator,
+                        modifier = Modifier.size(24.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    // Fallback to text initials if no icon
+                    Text(
+                        text = profile.emulator.take(2).uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Profile name: "Emulator - Game Name" format like desktop
+            // Profile name: only game name (without emulator prefix)
             Text(
-                text = "${profile.emulator} - ${profile.name}",
+                text = profile.name,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
                 maxLines = 1,
@@ -127,5 +142,21 @@ fun ProfileCard(
         } else {
             Spacer(modifier = Modifier.width(40.dp))
         }
+    }
+}
+
+/**
+ * Get the drawable resource ID for an emulator icon
+ * Returns null if no icon is available for that emulator
+ */
+private fun getEmulatorIconResource(emulator: String): Int? {
+    return when (emulator.lowercase()) {
+        "ppsspp" -> R.drawable.ic_emulator_ppsspp
+        // Add more emulators here as icons are added:
+        // "retroarch" -> R.drawable.ic_emulator_retroarch
+        // "dolphin" -> R.drawable.ic_emulator_dolphin
+        // "duckstation" -> R.drawable.ic_emulator_duckstation
+        // "citra" -> R.drawable.ic_emulator_citra
+        else -> null
     }
 }
