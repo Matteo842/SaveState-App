@@ -4,3 +4,10 @@
 /android-app/.idea
 /android-app/build
 /original file
+/android-app/app/release
+
+# Security - NEVER commit these!
+*.keystore
+*.jks
+/android-app/savestate-release.keystore
+/android-app/local.properties
