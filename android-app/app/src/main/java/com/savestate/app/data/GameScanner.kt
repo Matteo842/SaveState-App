@@ -1,10 +1,12 @@
 package com.savestate.app.data
 
+import android.content.Context
 import android.util.Log
 import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorConfig
 import com.savestate.app.data.model.EmulatorInfo
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -18,90 +20,48 @@ class GameScanner {
         // PSP save folder suffixes (from ppsspp_manager.py)
         private val PSP_SAVE_SUFFIXES = listOf("DATA00", "PROFILE00")
         
-        // PSP Game ID to Name mapping (fallback when PARAM.SFO is not readable)
-        // Format: ULUS/ULES/UCES/UCUS + numbers
-        private val pspGameDatabase = mapOf(
-            // God of War series
-            "UCUS98653" to "God of War: Chains of Olympus",
-            "ULUS10323" to "God of War: Chains of Olympus",
-            "UCES00842" to "God of War: Chains of Olympus",
-            "UCUS98737" to "God of War: Ghost of Sparta", 
-            "ULUS10510" to "God of War: Ghost of Sparta",
-            "UCES01401" to "God of War: Ghost of Sparta",
+        // Cached game database (loaded from assets/psp_game_database.json)
+        private var pspGameDatabase: Map<String, String>? = null
+        
+        /**
+         * Initialize the PSP game database from assets
+         * Should be called once during app startup
+         */
+        fun initDatabase(context: Context) {
+            if (pspGameDatabase != null) return
             
-            // Grand Theft Auto
-            "ULUS10041" to "Grand Theft Auto: Liberty City Stories",
-            "ULES00151" to "Grand Theft Auto: Liberty City Stories",
-            "ULUS10160" to "Grand Theft Auto: Vice City Stories",
-            "ULES00502" to "Grand Theft Auto: Vice City Stories",
-            "ULUS10391" to "Grand Theft Auto: Chinatown Wars",
-            
-            // Metal Gear Solid
-            "ULUS10202" to "Metal Gear Solid: Portable Ops",
-            "ULES00645" to "Metal Gear Solid: Portable Ops",
-            "ULUS10290" to "Metal Gear Solid: Peace Walker",
-            "ULES01372" to "Metal Gear Solid: Peace Walker",
-            
-            // Final Fantasy
-            "ULUS10336" to "Crisis Core: Final Fantasy VII",
-            "ULJM05254" to "Crisis Core: Final Fantasy VII",
-            "ULES01044" to "Crisis Core: Final Fantasy VII",
-            "ULUS10251" to "Final Fantasy Tactics: War of the Lions",
-            "ULES00850" to "Final Fantasy Tactics: War of the Lions",
-            "ULUS10297" to "Dissidia: Final Fantasy",
-            "ULES01270" to "Dissidia: Final Fantasy",
-            "ULUS10566" to "Dissidia 012: Final Fantasy",
-            
-            // Kingdom Hearts
-            "ULUS10487" to "Kingdom Hearts: Birth by Sleep",
-            "ULES01441" to "Kingdom Hearts: Birth by Sleep",
-            
-            // Monster Hunter
-            "ULUS10266" to "Monster Hunter Freedom 2",
-            "ULES00851" to "Monster Hunter Freedom 2",
-            "ULUS10391" to "Monster Hunter Freedom Unite",
-            "ULES01213" to "Monster Hunter Freedom Unite",
-            
-            // Persona
-            "ULUS10512" to "Persona 3 Portable",
-            "ULES01523" to "Persona 3 Portable",
-            
-            // Tekken
-            "ULJS00049" to "Tekken 5: Dark Resurrection",
-            "ULES00224" to "Tekken 5: Dark Resurrection",
-            "ULUS10139" to "Tekken 5: Dark Resurrection",
-            "ULUS10466" to "Tekken 6",
-            "ULES01376" to "Tekken 6",
-            
-            // Daxter
-            "UCUS98618" to "Daxter",
-            "UCES00044" to "Daxter",
-            
-            // Ratchet & Clank
-            "UCUS98633" to "Ratchet & Clank: Size Matters",
-            "UCES00420" to "Ratchet & Clank: Size Matters",
-            
-            // Jak & Daxter
-            "UCUS98640" to "Jak and Daxter: The Lost Frontier",
-            "UCES01184" to "Jak and Daxter: The Lost Frontier",
-            
-            // Naruto
-            "ULUS10582" to "Naruto Shippuden: Ultimate Ninja Impact",
-            "ULES01537" to "Naruto Shippuden: Ultimate Ninja Impact",
-            
-            // Dragon Ball
-            "ULUS10347" to "Dragon Ball Z: Shin Budokai",
-            "ULES00309" to "Dragon Ball Z: Shin Budokai",
-            "ULUS10456" to "Dragon Ball Z: Tenkaichi Tag Team",
-            "ULES01456" to "Dragon Ball Z: Tenkaichi Tag Team"
-        )
+            try {
+                val jsonString = context.assets.open("psp_game_database.json")
+                    .bufferedReader()
+                    .use { it.readText() }
+                
+                val jsonObject = JSONObject(jsonString)
+                val database = mutableMapOf<String, String>()
+                
+                jsonObject.keys().forEach { key ->
+                    database[key] = jsonObject.getString(key)
+                }
+                
+                pspGameDatabase = database
+                Log.d(TAG, "Loaded PSP game database with ${database.size} entries")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load PSP game database: ${e.message}")
+                pspGameDatabase = emptyMap()
+            }
+        }
         
         /**
          * Get game name from the database
          */
         fun getGameNameFromDatabase(gameId: String): String? {
-            return pspGameDatabase[gameId]
+            return pspGameDatabase?.get(gameId)
         }
+        
+        /**
+         * Check if database is loaded
+         */
+        fun isDatabaseLoaded(): Boolean = pspGameDatabase != null
     }
     
     /**
@@ -220,7 +180,7 @@ class GameScanner {
                 
                 // Fallback to database or ID if no SFO name found
                 if (gameName == null) {
-                    gameName = pspGameDatabase[baseId] ?: baseId
+                    gameName = getGameNameFromDatabase(baseId) ?: baseId
                     Log.d(TAG, "      Using fallback name: $gameName")
                 }
                 

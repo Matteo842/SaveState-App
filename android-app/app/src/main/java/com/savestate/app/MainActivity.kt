@@ -136,6 +136,9 @@ class MainActivity : ComponentActivity() {
         backupManager = BackupManager(applicationContext, settingsManager)
         profileRepository = ProfileRepository(applicationContext, configManager)
         
+        // Initialize PSP game database from assets
+        GameScanner.initDatabase(applicationContext)
+        
         // Load saved profiles
         val savedProfiles = profileRepository.loadProfiles()
         

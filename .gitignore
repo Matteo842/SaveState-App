@@ -11,3 +11,4 @@
 *.jks
 /android-app/savestate-release.keystore
 /android-app/local.properties
+/tools
