@@ -24,7 +24,7 @@ import com.savestate.app.ui.theme.*
  */
 @Composable
 fun SaveStateTopBar(
-    appVersion: String = "0.1",
+    appVersion: String,
     isDarkTheme: Boolean = true,
     onThemeToggle: () -> Unit,
     onSettingsClick: () -> Unit,

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
+import com.savestate.app.BuildConfig
 import com.savestate.app.data.model.GameProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +34,6 @@ class BackupManager(
         private const val TAG = "BackupManager"
         private const val MANIFEST_PATH = "savestate/manifest.json"
         private const val BUFFER_SIZE = 8192 // 8KB buffer for file operations
-        private const val APP_VERSION = "0.1" // TODO: Get from BuildConfig
     }
     
     /**
@@ -490,7 +490,7 @@ class BackupManager(
     ) {
         val manifest = JSONObject().apply {
             put("schema", 1)
-            put("app_version", APP_VERSION)
+            put("app_version", BuildConfig.VERSION_NAME)
             put("created_at", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date()))
             put("profile_name", profile.name)
             put("profile_id", profile.id)

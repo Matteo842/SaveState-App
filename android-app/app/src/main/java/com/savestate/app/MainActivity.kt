@@ -41,6 +41,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
+// App version from build.gradle.kts - single source of truth
+private val APP_VERSION = BuildConfig.VERSION_NAME
+
 class MainActivity : ComponentActivity() {
     
     private lateinit var emulatorDetector: EmulatorDetector
@@ -296,7 +299,7 @@ class MainActivity : ComponentActivity() {
                                 Toast.LENGTH_LONG
                             ).show()
                         },
-                        appVersion = "0.1"
+                        appVersion = APP_VERSION
                     )
                 } else {
                     MainScreen(
@@ -450,7 +453,7 @@ class MainActivity : ComponentActivity() {
                         onSettingsClick = { showSettingsScreen = true },
                         onThemeToggle = { isDarkTheme = !isDarkTheme },
                         isDarkTheme = isDarkTheme,
-                        appVersion = "0.1"
+                        appVersion = APP_VERSION
                     )
                 }
                 
