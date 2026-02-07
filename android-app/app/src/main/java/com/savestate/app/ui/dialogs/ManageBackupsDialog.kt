@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,24 +26,21 @@ import androidx.compose.ui.window.DialogProperties
 import com.savestate.app.data.BackupInfo
 
 /**
- * Dialog for selecting a backup to restore from.
+ * Dialog for managing backups (delete only).
  */
 @Composable
-fun RestoreBackupDialog(
+fun ManageBackupsDialog(
     profileName: String,
     backups: List<BackupInfo>,
-    isRestoring: Boolean,
-    onRestore: (BackupInfo) -> Unit,
+    onDelete: (BackupInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedBackup by remember { mutableStateOf<BackupInfo?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf<BackupInfo?>(null) }
     
     Dialog(
-        onDismissRequest = { if (!isRestoring) onDismiss() },
+        onDismissRequest = onDismiss,
         properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = !isRestoring,
-            dismissOnClickOutside = !isRestoring
+            usePlatformDefaultWidth = false
         )
     ) {
         Box(
@@ -78,7 +75,7 @@ fun RestoreBackupDialog(
                 ) {
                     Column {
                         Text(
-                            text = "Restore Backup",
+                            text = "Manage Backups",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -90,10 +87,7 @@ fun RestoreBackupDialog(
                         )
                     }
                     
-                    IconButton(
-                        onClick = onDismiss,
-                        enabled = !isRestoring
-                    ) {
+                    IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
@@ -138,7 +132,7 @@ fun RestoreBackupDialog(
                 } else {
                     // Backup list
                     Text(
-                        text = "Select a backup to restore:",
+                        text = "Tap the delete icon to remove a backup:",
                         fontSize = 14.sp,
                         color = Color(0xFF8b949e),
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -149,86 +143,71 @@ fun RestoreBackupDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(backups) { backup ->
-                            BackupItem(
+                            ManageBackupItem(
                                 backup = backup,
-                                isSelected = selectedBackup == backup,
-                                isEnabled = !isRestoring,
-                                onSelect = { selectedBackup = backup }
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Restore button
-                    Button(
-                        onClick = { 
-                            selectedBackup?.let { onRestore(it) }
-                        },
-                        enabled = selectedBackup != null && !isRestoring,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF238636),
-                            disabledContainerColor = Color(0xFF21262d)
-                        )
-                    ) {
-                        if (isRestoring) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Restoring...")
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Restore,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Restore Selected Backup",
-                                fontWeight = FontWeight.SemiBold
+                                onDelete = { showDeleteConfirm = backup }
                             )
                         }
                     }
                 }
             }
         }
+        
+        // Delete confirmation dialog
+        showDeleteConfirm?.let { backupToDelete ->
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirm = null },
+                title = { Text("Delete Backup?") },
+                text = { 
+                    Text("Are you sure you want to delete this backup?\n\n${backupToDelete.fileName}\n\nThis action cannot be undone.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDelete(backupToDelete)
+                            showDeleteConfirm = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Color(0xFFf85149)
+                        )
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirm = null }) {
+                        Text("Cancel")
+                    }
+                },
+                containerColor = Color(0xFF161b22),
+                titleContentColor = Color.White,
+                textContentColor = Color(0xFFc9d1d9)
+            )
+        }
     }
 }
 
 @Composable
-private fun BackupItem(
+private fun ManageBackupItem(
     backup: BackupInfo,
-    isSelected: Boolean,
-    isEnabled: Boolean,
-    onSelect: () -> Unit
+    onDelete: () -> Unit
 ) {
-    val borderColor = if (isSelected) Color(0xFF238636) else Color(0xFF30363d)
-    val backgroundColor = if (isSelected) Color(0xFF0d1117) else Color.Transparent
-    
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(backgroundColor)
+            .background(Color.Transparent)
             .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = borderColor,
+                width = 1.dp,
+                color = Color(0xFF30363d),
                 shape = RoundedCornerShape(12.dp)
             )
-            .clickable(enabled = isEnabled) { onSelect() }
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.weight(1f)
         ) {
             Text(
                 text = backup.formattedDate,
@@ -253,6 +232,14 @@ private fun BackupItem(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete backup",
+                tint = Color(0xFFf85149)
+            )
         }
     }
 }

@@ -29,6 +29,7 @@ import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorInfo
 import com.savestate.app.data.model.GameProfile
 import com.savestate.app.ui.dialogs.RestoreBackupDialog
+import com.savestate.app.ui.dialogs.ManageBackupsDialog
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
 import com.savestate.app.ui.screens.MainScreen
@@ -142,6 +143,14 @@ class MainActivity : ComponentActivity() {
         // Initialize PSP game database from assets
         GameScanner.initDatabase(applicationContext)
         
+        // Request storage permission at startup (like WiFi FTP Server)
+        if (!hasStoragePermission()) {
+            requestStoragePermission {
+                // Permission granted, continue normally
+                Log.d("SaveState", "Storage permission granted at startup")
+            }
+        }
+        
         // Load saved profiles
         val savedProfiles = profileRepository.loadProfiles()
         
@@ -180,6 +189,7 @@ class MainActivity : ComponentActivity() {
                 
                 // Restore dialog state
                 var showRestoreDialog by remember { mutableStateOf(false) }
+                var showManageDialog by remember { mutableStateOf(false) }
                 var availableBackups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
                 var isRestoring by remember { mutableStateOf(false) }
                 
@@ -212,25 +222,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                // Function to scan for games
-                fun scanForGames(emulator: EmulatorInfo) {
+                // Function to open folder picker directly
+                fun openFolderPickerForEmulator(emulator: EmulatorInfo) {
                     showGameDialog = true
-                    isLoadingGames = true
+                    isLoadingGames = false
                     currentEmulator = emulator
-                    
-                    coroutineScope.launch {
-                        delay(200)
-                        
-                        // Scan for games on background thread
-                        val games = withContext(Dispatchers.IO) {
-                            gameScanner.scanPPSSPPGames(emulator)
-                        }
-                        
-                        detectedGames = games
-                        isLoadingGames = false
-                        
-                        Log.d("SaveState", "Found ${games.size} games: ${games.map { it.gameName }}")
-                    }
+                    detectedGames = emptyList() // Start with empty list - user must select folder
                 }
                 
                 // Navigation: Show either MainScreen or SettingsScreen
@@ -395,8 +392,7 @@ class MainActivity : ComponentActivity() {
                             showRestoreDialog = true
                         },
                         onManageBackupsClick = {
-                            // For now, manage backups just opens the restore dialog
-                            // which also allows deleting backups
+                            // Open manage backups dialog
                             val selectedProfile = profiles.find { it.id == selectedProfileId }
                             if (selectedProfile == null) {
                                 Toast.makeText(
@@ -408,30 +404,10 @@ class MainActivity : ComponentActivity() {
                             }
                             
                             availableBackups = backupManager.listBackups(selectedProfile)
-                            showRestoreDialog = true
+                            showManageDialog = true
                         },
                         onNewProfileClick = { 
-                            // Check storage permission first
-                            if (!hasStoragePermission()) {
-                                requestStoragePermission {
-                                    // After permission granted, start emulator detection
-                                    showEmulatorDialog = true
-                                    isLoadingEmulators = true
-                                    
-                                    coroutineScope.launch {
-                                        delay(300)
-                                        val detected = withContext(Dispatchers.IO) {
-                                            emulatorDetector.detectInstalledEmulators()
-                                        }
-                                        installedEmulators = detected
-                                        isLoadingEmulators = false
-                                        Log.d("SaveState", "Detected ${detected.size} emulators")
-                                    }
-                                }
-                                return@MainScreen
-                            }
-                            
-                            // Start scanning for emulators
+                            // Start scanning for emulators (permission already granted at startup)
                             showEmulatorDialog = true
                             isLoadingEmulators = true
                             
@@ -466,8 +442,8 @@ class MainActivity : ComponentActivity() {
                             selectedEmulator = emulator
                             showEmulatorDialog = false
                             
-                            // Now scan for games with this emulator
-                            scanForGames(emulator)
+                            // Open folder picker directly - no automatic scanning
+                            openFolderPickerForEmulator(emulator)
                         },
                         onDismiss = { 
                             showEmulatorDialog = false 
@@ -567,6 +543,20 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         },
+                        onDismiss = {
+                            if (!isRestoring) {
+                                showRestoreDialog = false
+                            }
+                        }
+                    )
+                }
+                
+                // Manage backups dialog
+                if (showManageDialog) {
+                    val selectedProfile = profiles.find { it.id == selectedProfileId }
+                    ManageBackupsDialog(
+                        profileName = selectedProfile?.name ?: "",
+                        backups = availableBackups,
                         onDelete = { backupInfo ->
                             val deleted = backupManager.deleteBackup(backupInfo)
                             if (deleted) {
@@ -602,9 +592,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onDismiss = {
-                            if (!isRestoring) {
-                                showRestoreDialog = false
-                            }
+                            showManageDialog = false
                         }
                     )
                 }
@@ -831,7 +819,7 @@ class MainActivity : ComponentActivity() {
             // Android 11+ - need to send user to settings
             Toast.makeText(
                 this,
-                "SaveState needs storage access to find your save files. Please enable 'All files access' in the next screen.",
+                "SaveState needs storage access to manage your save files. Please enable 'All files access' permission.",
                 Toast.LENGTH_LONG
             ).show()
             

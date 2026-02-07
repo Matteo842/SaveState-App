@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,15 +68,6 @@ fun SelectGameDialog(
                     onClose = onDismiss
                 )
                 
-                // Subtitle
-                Text(
-                    text = "The following profiles/games have been found for ${emulator.emulatorType.displayName}.\nSelect the one to add:",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    lineHeight = 18.sp
-                )
-                
                 // Content
                 if (isLoading) {
                     // Loading state
@@ -95,32 +87,41 @@ fun SelectGameDialog(
                                 modifier = Modifier.size(48.dp)
                             )
                             Text(
-                                text = "Scanning for games...",
+                                text = "Scanning folder...",
                                 color = TextSecondary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
                 } else if (detectedGames.isEmpty()) {
-                    // Empty state with browse option
-                    EmptyGamesState(
+                    // Initial state - ask user to select folder
+                    SelectFolderPrompt(
                         emulatorName = emulator.emulatorType.displayName,
                         onBrowseFolder = onBrowseFolder
                     )
                 } else {
-                    // Games list
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(detectedGames.sortedBy { it.gameName }) { game ->
-                            GameListItem(
-                                game = game,
-                                onClick = { onGameSelected(game) }
-                            )
+                    // Games list with subtitle
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Found ${detectedGames.size} game(s). Select one to add:",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            lineHeight = 18.sp
+                        )
+                        
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(detectedGames.sortedBy { it.gameName }) { game ->
+                                GameListItem(
+                                    game = game,
+                                    onClick = { onGameSelected(game) }
+                                )
+                            }
                         }
                     }
                 }
@@ -130,28 +131,9 @@ fun SelectGameDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Browse folder button
-                    OutlinedButton(
-                        onClick = onBrowseFolder,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = SaveStateRed
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SaveStateRed.copy(alpha = 0.5f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Browse...")
-                    }
-                    
-                    Spacer(modifier = Modifier.weight(1f))
-                    
                     TextButton(
                         onClick = onDismiss,
                         colors = ButtonDefaults.textButtonColors(
@@ -216,60 +198,137 @@ private fun GameDialogHeader(
 }
 
 /**
- * Empty state when no games are found - with browse option
+ * Prompt to select the SAVEDATA folder - clear and direct
  */
 @Composable
-private fun EmptyGamesState(
+private fun SelectFolderPrompt(
     emulatorName: String,
     onBrowseFolder: () -> Unit
 ) {
+    // Get folder structure based on emulator
+    val folderPath = when (emulatorName) {
+        "PPSSPP" -> "PSP/SAVEDATA"
+        "RetroArch" -> "RetroArch/saves"
+        "Dolphin" -> "dolphin-emu/Wii/title"
+        "DuckStation" -> "duckstation/memcards"
+        "Citra" -> "citra-emu/sdmc"
+        "Azahar" -> "azahar-emu/sdmc"
+        "DraStic" -> "DraStic/backup"
+        "Flycast" -> "flycast/data"
+        "mGBA" -> "mGBA/saves"
+        "Lemuroid" -> "Lemuroid/saves"
+        "Pizza Boy" -> "PizzaBoy/saves"
+        "AetherSX2" -> "AetherSX2/memcards"
+        "Vita3K" -> "Vita3K/ux0/user"
+        "Yuzu" -> "yuzu/nand/user/save"
+        "Citron" -> "citron/nand/user/save"
+        else -> "emulator/saves"
+    }
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Icon
             Icon(
-                imageVector = Icons.Filled.Folder,
+                imageVector = Icons.Filled.FolderOpen,
                 contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = TextMuted
+                modifier = Modifier.size(72.dp),
+                tint = SaveStateRed
             )
             
+            // Title
             Text(
-                text = "No Games Found",
+                text = "Select Save Folder",
                 color = TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
             )
             
+            // Instructions
             Text(
-                text = "No save data was found for $emulatorName.\n\nOn Android 11+, we may not have access to the app's private folder. Use the \"Browse\" button below to manually select the SAVEDATA folder.",
+                text = "Navigate to your $emulatorName save folder:",
                 color = TextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 14.sp,
                 textAlign = TextAlign.Center
             )
             
+            // Path - GREEN and bold to stand out
+            Text(
+                text = folderPath,
+                color = Color(0xFF4CAF50), // Green color
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Important warning - neutral gray with yellow icon
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = DarkSurfaceVariant, // Neutral gray
+                modifier = Modifier.padding(horizontal = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "⚠️",
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Important",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "If you haven't created a custom folder in your emulator settings, SaveState won't be able to access the default Android/data location.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+            
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Browse button
+            // Big prominent button
             Button(
                 onClick = onBrowseFolder,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SaveStateRed
-                )
+                ),
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
                     imageVector = Icons.Filled.FolderOpen,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Select SAVEDATA Folder")
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Select Save Folder",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
