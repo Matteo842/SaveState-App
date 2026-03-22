@@ -18,7 +18,7 @@
 
 **SaveState App** is an Android application designed to backup and restore save files from **emulators**. Unlike the desktop version which targets PC games in general, this mobile app is specifically built for the Android emulator ecosystem.
 
-### Current Status: `Pre-Release Alpha (v0.2)`
+### Current Status: `Pre-Release Alpha (v0.4)`
 
 The app is now **functional** and can be used to:
 - ✅ Detect installed emulators
@@ -33,6 +33,7 @@ The app is now **functional** and can be used to:
 | Emulator | Platform | Status |
 |----------|----------|--------|
 | **PPSSPP** | PSP | ✅ Supported |
+| **RetroArch** | Multi-system | ✅ Supported |
 | Citra | 3DS | 🔜 Coming Soon |
 | Dolphin | GameCube/Wii | 🔜 Coming Soon |
 | DuckStation | PS1 | 🔜 Coming Soon |

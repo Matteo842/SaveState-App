@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
@@ -205,10 +207,12 @@ private fun SelectFolderPrompt(
     emulatorName: String,
     onBrowseFolder: () -> Unit
 ) {
+    val isRetroArch = emulatorName == "RetroArch"
+    
     // Get folder structure based on emulator
     val folderPath = when (emulatorName) {
         "PPSSPP" -> "PSP/SAVEDATA"
-        "RetroArch" -> "RetroArch/saves"
+        "RetroArch" -> "RetroArch/saves  or  RetroArch/states"
         "Dolphin" -> "dolphin-emu/Wii/title"
         "DuckStation" -> "duckstation/memcards"
         "Citra" -> "citra-emu/sdmc"
@@ -225,109 +229,110 @@ private fun SelectFolderPrompt(
         else -> "emulator/saves"
     }
     
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Spacer(modifier = Modifier.weight(1f, fill = false))
+        
+        // Icon
+        Icon(
+            imageVector = Icons.Filled.FolderOpen,
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+            tint = SaveStateRed
+        )
+        
+        // Title
+        Text(
+            text = "Select Save Folder",
+            color = TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+        
+        // Instructions
+        Text(
+            text = "Navigate to your $emulatorName save folder:",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
+        
+        // Path
+        Text(
+            text = folderPath,
+            color = Color(0xFF4CAF50),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        
+        // RetroArch-specific hint
+        if (isRetroArch) {
+            Text(
+                text = "Select \"saves\" for battery saves (.srm) or \"states\" for save states",
+                color = TextMuted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp
+            )
+        }
+        
+        // Big prominent button — FIRST, always visible
+        Button(
+            onClick = onBrowseFolder,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = SaveStateRed
+            ),
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .height(52.dp),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            // Icon
             Icon(
                 imageVector = Icons.Filled.FolderOpen,
                 contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = SaveStateRed
+                modifier = Modifier.size(22.dp)
             )
-            
-            // Title
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = "Select Save Folder",
-                color = TextPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
             )
-            
-            // Instructions
-            Text(
-                text = "Navigate to your $emulatorName save folder:",
-                color = TextSecondary,
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center
-            )
-            
-            // Path - GREEN and bold to stand out
-            Text(
-                text = folderPath,
-                color = Color(0xFF4CAF50), // Green color
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            // Important warning - neutral gray with yellow icon
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = DarkSurfaceVariant, // Neutral gray
-                modifier = Modifier.padding(horizontal = 8.dp)
+        }
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        // Important warning — at the bottom, less prominent
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = DarkSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        text = "⚠️",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "Important",
-                            color = TextPrimary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "If you haven't created a custom folder in your emulator settings, SaveState won't be able to access the default Android/data location.",
-                            color = TextSecondary,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Big prominent button
-            Button(
-                onClick = onBrowseFolder,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SaveStateRed
-                ),
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Select Save Folder",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
+                    text = "⚠️",
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+                Text(
+                    text = if (isRetroArch)
+                        "Make sure RetroArch saves to an accessible folder (e.g. Internal Storage/RetroArch), not the default Android/data location."
+                    else
+                        "If you haven't set a custom save folder in your emulator, the default Android/data location may not be accessible.",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
                 )
             }
         }

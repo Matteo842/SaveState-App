@@ -115,22 +115,29 @@ class BackupManager(
             Log.i(TAG, "Creating backup archive: $archiveName")
             
             // 4. Calculate total size for progress
-            val totalSize = calculateTotalSize(sourceDocument)
             var bytesWritten = 0L
             
             // 5. Create ZIP archive in temp location
             ZipOutputStream(BufferedOutputStream(FileOutputStream(tempFile))).use { zipOut ->
-                // Set compression level (standard)
                 zipOut.setLevel(Deflater.DEFAULT_COMPRESSION)
                 
-                // Write manifest
                 writeManifest(zipOut, profile, sourceDocument)
                 
-                // Add all files from source
-                val baseFolderName = sourceDocument.name ?: sanitizedName
-                addDocumentToZip(zipOut, sourceDocument, baseFolderName) { bytes ->
-                    bytesWritten += bytes
-                    onProgress?.invoke(bytesWritten, totalSize)
+                if (profile.gameFilePrefix != null) {
+                    // File-level filtering (RetroArch): only back up files matching the game prefix
+                    val totalSize = calculateFilteredSize(sourceDocument, profile.gameFilePrefix)
+                    addFilteredFilesToZip(zipOut, sourceDocument, profile.gameFilePrefix) { bytes ->
+                        bytesWritten += bytes
+                        onProgress?.invoke(bytesWritten, totalSize)
+                    }
+                } else {
+                    // Directory-level backup (PPSSPP, etc.): back up entire folder
+                    val totalSize = calculateTotalSize(sourceDocument)
+                    val baseFolderName = sourceDocument.name ?: sanitizedName
+                    addDocumentToZip(zipOut, sourceDocument, baseFolderName) { bytes ->
+                        bytesWritten += bytes
+                        onProgress?.invoke(bytesWritten, totalSize)
+                    }
                 }
             }
             
@@ -567,6 +574,59 @@ class BackupManager(
             total += calculateTotalSize(child)
         }
         return total
+    }
+    
+    /**
+     * Calculates total size of files matching a prefix in a directory.
+     */
+    private fun calculateFilteredSize(directory: DocumentFile, prefix: String): Long {
+        var total = 0L
+        directory.listFiles().forEach { child ->
+            if (child.isFile) {
+                val name = child.name ?: return@forEach
+                if (name.startsWith("$prefix.")) {
+                    total += child.length()
+                }
+            }
+        }
+        return total
+    }
+    
+    /**
+     * Adds only files matching a game prefix to the ZIP (for RetroArch file-level backups).
+     * Files like "GameName.srm", "GameName.rtc", "GameName.state", etc.
+     */
+    private fun addFilteredFilesToZip(
+        zipOut: ZipOutputStream,
+        directory: DocumentFile,
+        prefix: String,
+        onBytesWritten: (Long) -> Unit
+    ) {
+        directory.listFiles().forEach { child ->
+            if (!child.isFile) return@forEach
+            val name = child.name ?: return@forEach
+            
+            if (!name.startsWith("$prefix.")) return@forEach
+            
+            val fileEntry = ZipEntry(name)
+            zipOut.putNextEntry(fileEntry)
+            
+            try {
+                context.contentResolver.openInputStream(child.uri)?.use { inputStream ->
+                    val buffer = ByteArray(BUFFER_SIZE)
+                    var bytesRead: Int
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        zipOut.write(buffer, 0, bytesRead)
+                        onBytesWritten(bytesRead.toLong())
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error adding file to zip: ${child.uri}: ${e.message}")
+            }
+            
+            zipOut.closeEntry()
+            Log.d(TAG, "Added file to archive: $name")
+        }
     }
     
     /**

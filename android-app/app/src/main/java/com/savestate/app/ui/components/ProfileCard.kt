@@ -152,8 +152,8 @@ fun ProfileCard(
 private fun getEmulatorIconResource(emulator: String): Int? {
     return when (emulator.lowercase()) {
         "ppsspp" -> R.drawable.ic_emulator_ppsspp
+        "retroarch" -> R.drawable.ic_emulator_retroarch
         // Add more emulators here as icons are added:
-        // "retroarch" -> R.drawable.ic_emulator_retroarch
         // "dolphin" -> R.drawable.ic_emulator_dolphin
         // "duckstation" -> R.drawable.ic_emulator_duckstation
         // "citra" -> R.drawable.ic_emulator_citra

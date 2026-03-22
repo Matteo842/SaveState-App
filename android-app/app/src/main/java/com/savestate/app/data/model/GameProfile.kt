@@ -13,7 +13,8 @@ data class GameProfile(
     val backupCount: Int = 0,
     val lastBackup: String? = null, // Format: "DD/MM/YYYY HH:mm"
     val isFavorite: Boolean = false,
-    val iconResId: Int? = null // Resource ID for emulator icon
+    val iconResId: Int? = null, // Resource ID for emulator icon
+    val gameFilePrefix: String? = null // Base ROM name for file-level filtering (RetroArch)
 )
 
 /**

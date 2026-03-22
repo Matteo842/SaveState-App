@@ -10,23 +10,18 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Scans emulator directories to find saves/games
+ * Scans emulator directories to find saves/games.
+ * PPSSPP logic lives here; RetroArch logic is in RetroArchManager.
  */
 class GameScanner {
     
     companion object {
         private const val TAG = "GameScanner"
         
-        // PSP save folder suffixes (from ppsspp_manager.py)
         private val PSP_SAVE_SUFFIXES = listOf("DATA00", "PROFILE00")
         
-        // Cached game database (loaded from assets/psp_game_database.json)
         private var pspGameDatabase: Map<String, String>? = null
         
-        /**
-         * Initialize the PSP game database from assets
-         * Should be called once during app startup
-         */
         fun initDatabase(context: Context) {
             if (pspGameDatabase != null) return
             
@@ -51,16 +46,10 @@ class GameScanner {
             }
         }
         
-        /**
-         * Get game name from the database
-         */
         fun getGameNameFromDatabase(gameId: String): String? {
             return pspGameDatabase?.get(gameId)
         }
         
-        /**
-         * Check if database is loaded
-         */
         fun isDatabaseLoaded(): Boolean = pspGameDatabase != null
     }
     
@@ -68,9 +57,8 @@ class GameScanner {
      * Scan for PPSSPP games in all known save locations
      */
     fun scanPPSSPPGames(emulatorInfo: EmulatorInfo): List<DetectedGame> {
-        val gamesMap = mutableMapOf<String, DetectedGame>() // Group by base game ID
+        val gamesMap = mutableMapOf<String, DetectedGame>()
         
-        // Check all possible PPSSPP save paths
         for (savePath in EmulatorConfig.ppssppSavePaths) {
             val saveDir = File(savePath)
             Log.d(TAG, "Checking PPSSPP path: $savePath")
@@ -80,13 +68,11 @@ class GameScanner {
                 Log.d(TAG, "  Scanning directory...")
                 val foundGames = scanPPSSPPDirectory(saveDir)
                 
-                // Merge found games by base ID
                 for (game in foundGames) {
                     val existingGame = gamesMap[game.gameId]
                     if (existingGame == null) {
                         gamesMap[game.gameId] = game
                     } else {
-                        // Keep the one with more saves or a better name
                         if (game.saveCount > existingGame.saveCount || 
                             (existingGame.gameName == existingGame.gameId && game.gameName != game.gameId)) {
                             gamesMap[game.gameId] = game
@@ -105,12 +91,8 @@ class GameScanner {
         return result
     }
     
-    /**
-     * Scan a PPSSPP SAVEDATA directory for game saves
-     * Looks for folders ending with DATA00 or PROFILE00
-     */
     private fun scanPPSSPPDirectory(saveDataDir: File): List<DetectedGame> {
-        val gamesMap = mutableMapOf<String, MutableList<File>>() // Group folders by base ID
+        val gamesMap = mutableMapOf<String, MutableList<File>>()
         
         try {
             val allItems = saveDataDir.listFiles() ?: return emptyList()
@@ -124,7 +106,6 @@ class GameScanner {
                 val folderName = item.name
                 Log.d(TAG, "    Checking folder: $folderName")
                 
-                // Extract base game ID by checking for known suffixes
                 var baseGameId: String? = null
                 for (suffix in PSP_SAVE_SUFFIXES) {
                     if (folderName.endsWith(suffix)) {
@@ -135,10 +116,8 @@ class GameScanner {
                 }
                 
                 if (baseGameId == null) {
-                    // If no known suffix, but looks like a PSP game ID format
-                    // (4 letters + 5 digits), use the whole folder name
                     if (folderName.matches(Regex("^[A-Z]{4}\\d{5}.*$"))) {
-                        baseGameId = folderName.take(9) // Just the ID part
+                        baseGameId = folderName.take(9)
                         Log.d(TAG, "      Looks like PSP ID, using: $baseGameId")
                     } else {
                         Log.d(TAG, "      Skipping - doesn't match known patterns")
@@ -146,21 +125,17 @@ class GameScanner {
                     }
                 }
                 
-                // Add to the group
                 gamesMap.getOrPut(baseGameId) { mutableListOf() }.add(item)
             }
             
-            // Process each group
             val games = mutableListOf<DetectedGame>()
             for ((baseId, folders) in gamesMap) {
-                // Try to get game name from PARAM.SFO in any of the folders
                 var gameName: String? = null
                 var totalSaves = 0
                 var latestModified = 0L
                 var primaryPath: String = folders.first().absolutePath
                 
                 for (folder in folders) {
-                    // Check for PARAM.SFO
                     val sfoFile = File(folder, "PARAM.SFO")
                     if (sfoFile.exists() && gameName == null) {
                         gameName = SfoParser.parseParamSfo(sfoFile.absolutePath)
@@ -168,17 +143,14 @@ class GameScanner {
                         primaryPath = folder.absolutePath
                     }
                     
-                    // Count save files in this folder
                     val saveCount = folder.listFiles()?.count { it.isFile } ?: 0
                     totalSaves += saveCount
                     
-                    // Track latest modification
                     if (folder.lastModified() > latestModified) {
                         latestModified = folder.lastModified()
                     }
                 }
                 
-                // Fallback to database or ID if no SFO name found
                 if (gameName == null) {
                     gameName = getGameNameFromDatabase(baseId) ?: baseId
                     Log.d(TAG, "      Using fallback name: $gameName")
@@ -189,7 +161,7 @@ class GameScanner {
                         gameId = baseId,
                         gameName = gameName,
                         savePath = primaryPath,
-                        parentPath = saveDataDir.absolutePath, // Store parent folder for restore
+                        parentPath = saveDataDir.absolutePath,
                         emulatorType = Emulator.PPSSPP,
                         saveCount = totalSaves,
                         lastModified = latestModified
@@ -207,9 +179,6 @@ class GameScanner {
         }
     }
     
-    /**
-     * Check if any PPSSPP save data exists on the device
-     */
     fun hasPPSSPPSaves(): Boolean {
         for (savePath in EmulatorConfig.ppssppSavePaths) {
             val saveDir = File(savePath)
@@ -223,9 +192,6 @@ class GameScanner {
         return false
     }
     
-    /**
-     * Get the first valid PPSSPP save path
-     */
     fun getValidPPSSPPSavePath(): String? {
         for (savePath in EmulatorConfig.ppssppSavePaths) {
             val saveDir = File(savePath)

@@ -21,6 +21,7 @@ import com.savestate.app.data.BackupManager
 import com.savestate.app.data.ConfigManager
 import com.savestate.app.data.EmulatorDetector
 import com.savestate.app.data.GameScanner
+import com.savestate.app.data.RetroArchManager
 import com.savestate.app.data.ProfileRepository
 import com.savestate.app.data.SettingsManager
 import com.savestate.app.data.SfoParser
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
     
     private lateinit var emulatorDetector: EmulatorDetector
     private lateinit var gameScanner: GameScanner
+    private lateinit var retroArchManager: RetroArchManager
     private lateinit var configManager: ConfigManager
     private lateinit var settingsManager: SettingsManager
     private lateinit var backupManager: BackupManager
@@ -135,6 +137,7 @@ class MainActivity : ComponentActivity() {
         // Initialize detectors and managers
         emulatorDetector = EmulatorDetector(applicationContext)
         gameScanner = GameScanner()
+        retroArchManager = RetroArchManager()
         configManager = ConfigManager(applicationContext)
         settingsManager = SettingsManager(applicationContext, configManager)
         backupManager = BackupManager(applicationContext, settingsManager)
@@ -461,16 +464,22 @@ class MainActivity : ComponentActivity() {
                         onGameSelected = { game ->
                             showGameDialog = false
                             
+                            // For RetroArch, store the base ROM name as file prefix
+                            val filePrefix = if (game.emulatorType == Emulator.RETROARCH) {
+                                game.gameId
+                            } else null
+                            
                             // Create a new profile with the selected game
                             val newProfile = GameProfile(
                                 id = UUID.randomUUID().toString(),
                                 name = game.gameName,
                                 emulator = selectedEmulator!!.emulatorType.displayName,
                                 savePath = game.savePath,
-                                parentPath = game.parentPath, // Store parent for restore
+                                parentPath = game.parentPath,
                                 backupCount = 0,
                                 lastBackup = null,
-                                isFavorite = false
+                                isFavorite = false,
+                                gameFilePrefix = filePrefix
                             )
                             
                             // Check if profile already exists
@@ -633,79 +642,12 @@ class MainActivity : ComponentActivity() {
                 
                 Log.d("SaveState", "Scanning SAF folder: ${documentFile.name}")
                 
-                // List all items in the folder
-                val children = documentFile.listFiles()
-                Log.d("SaveState", "Found ${children.size} items in SAVEDATA folder")
-                
-                // Group games by base ID
-                val gamesMap = mutableMapOf<String, DetectedGame>()
-                
-                for (child in children) {
-                    if (!child.isDirectory) continue
-                    
-                    val folderName = child.name ?: continue
-                    
-                    // Check if it matches PSP save folder pattern
-                    var baseGameId: String? = null
-                    
-                    if (folderName.endsWith("DATA00")) {
-                        baseGameId = folderName.dropLast(6)
-                    } else if (folderName.endsWith("PROFILE00")) {
-                        baseGameId = folderName.dropLast(9)
-                    } else if (folderName.matches(Regex("^[A-Z]{4}\\d{5}.*$"))) {
-                        baseGameId = folderName.take(9)
-                    }
-                    
-                    if (baseGameId == null) {
-                        continue
-                    }
-                    
-                    Log.d("SaveState", "  Found game ID: $baseGameId")
-                    
-                    // Skip if we already have this game
-                    if (gamesMap.containsKey(baseGameId)) {
-                        Log.d("SaveState", "  Already have this game, skipping duplicate")
-                        continue
-                    }
-                    
-                    // Try to get game name from PARAM.SFO
-                    var gameName: String? = null
-                    val sfoFile = child.findFile("PARAM.SFO")
-                    if (sfoFile != null && sfoFile.isFile) {
-                        try {
-                            contentResolver.openInputStream(sfoFile.uri)?.use { inputStream ->
-                                val data = inputStream.readBytes()
-                                gameName = parseSfoFromBytes(data)
-                            }
-                        } catch (e: Exception) {
-                            Log.w("SaveState", "Error parsing SFO for $folderName: ${e.message}")
-                        }
-                    }
-                    
-                    // Fallback to database or ID
-                    if (gameName == null) {
-                        gameName = GameScanner.getGameNameFromDatabase(baseGameId) ?: baseGameId
-                    }
-                    
-                    // Count files
-                    val saveCount = try {
-                        child.listFiles().count { it.isFile }
-                    } catch (e: Exception) {
-                        0
-                    }
-                    
-                    gamesMap[baseGameId] = DetectedGame(
-                        gameId = baseGameId,
-                        gameName = gameName ?: baseGameId,
-                        savePath = child.uri.toString(),
-                        parentPath = documentFile.uri.toString(),
-                        emulatorType = currentEmulator?.emulatorType ?: Emulator.PPSSPP,
-                        saveCount = saveCount,
-                        lastModified = child.lastModified()
-                    )
+                val emulatorType = currentEmulator?.emulatorType
+                val games = when (emulatorType) {
+                    Emulator.RETROARCH -> scanRetroArchSafFolder(documentFile)
+                    else -> scanPPSSPPSafFolder(documentFile)
                 }
                 
-                val games = gamesMap.values.toList()
                 Log.d("SaveState", "SAF scan complete. Found ${games.size} unique games")
                 
                 runOnUiThread {
@@ -720,6 +662,83 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }.start()
+    }
+    
+    /**
+     * Scan a SAF folder for PPSSPP saves (folder-based: each game has its own subfolder)
+     */
+    private fun scanPPSSPPSafFolder(documentFile: DocumentFile): List<DetectedGame> {
+        val children = documentFile.listFiles()
+        Log.d("SaveState", "Found ${children.size} items in SAVEDATA folder")
+        
+        val gamesMap = mutableMapOf<String, DetectedGame>()
+        
+        for (child in children) {
+            if (!child.isDirectory) continue
+            
+            val folderName = child.name ?: continue
+            
+            var baseGameId: String? = null
+            
+            if (folderName.endsWith("DATA00")) {
+                baseGameId = folderName.dropLast(6)
+            } else if (folderName.endsWith("PROFILE00")) {
+                baseGameId = folderName.dropLast(9)
+            } else if (folderName.matches(Regex("^[A-Z]{4}\\d{5}.*$"))) {
+                baseGameId = folderName.take(9)
+            }
+            
+            if (baseGameId == null) continue
+            
+            Log.d("SaveState", "  Found game ID: $baseGameId")
+            
+            if (gamesMap.containsKey(baseGameId)) {
+                Log.d("SaveState", "  Already have this game, skipping duplicate")
+                continue
+            }
+            
+            var gameName: String? = null
+            val sfoFile = child.findFile("PARAM.SFO")
+            if (sfoFile != null && sfoFile.isFile) {
+                try {
+                    contentResolver.openInputStream(sfoFile.uri)?.use { inputStream ->
+                        val data = inputStream.readBytes()
+                        gameName = parseSfoFromBytes(data)
+                    }
+                } catch (e: Exception) {
+                    Log.w("SaveState", "Error parsing SFO for $folderName: ${e.message}")
+                }
+            }
+            
+            if (gameName == null) {
+                gameName = GameScanner.getGameNameFromDatabase(baseGameId) ?: baseGameId
+            }
+            
+            val saveCount = try {
+                child.listFiles().count { it.isFile }
+            } catch (e: Exception) {
+                0
+            }
+            
+            gamesMap[baseGameId] = DetectedGame(
+                gameId = baseGameId,
+                gameName = gameName ?: baseGameId,
+                savePath = child.uri.toString(),
+                parentPath = documentFile.uri.toString(),
+                emulatorType = currentEmulator?.emulatorType ?: Emulator.PPSSPP,
+                saveCount = saveCount,
+                lastModified = child.lastModified()
+            )
+        }
+        
+        return gamesMap.values.toList()
+    }
+    
+    /**
+     * Scan a SAF folder for RetroArch saves — delegates to RetroArchManager.
+     */
+    private fun scanRetroArchSafFolder(documentFile: DocumentFile): List<DetectedGame> {
+        return retroArchManager.scanSafFolder(documentFile)
     }
     
     /**

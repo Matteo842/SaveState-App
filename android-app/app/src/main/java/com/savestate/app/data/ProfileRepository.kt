@@ -204,7 +204,8 @@ class ProfileRepository(
             backupCount = obj.optInt("backupCount", 0),
             lastBackup = obj.optString("lastBackup", null),
             isFavorite = obj.optBoolean("isFavorite", false),
-            iconResId = if (obj.has("iconResId")) obj.getInt("iconResId") else null
+            iconResId = if (obj.has("iconResId")) obj.getInt("iconResId") else null,
+            gameFilePrefix = obj.optString("gameFilePrefix", null)
         )
     }
     
@@ -219,6 +220,7 @@ class ProfileRepository(
             put("lastBackup", profile.lastBackup)
             put("isFavorite", profile.isFavorite)
             profile.iconResId?.let { put("iconResId", it) }
+            profile.gameFilePrefix?.let { put("gameFilePrefix", it) }
         }
     }
 }

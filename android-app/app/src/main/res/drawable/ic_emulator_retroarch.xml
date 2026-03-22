@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Converted from Retroarch.svg — RetroArch-style icon -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <!-- Rounded background (grey tile) -->
+    <path
+        android:fillColor="#E4E4E4"
+        android:pathData="M 6.8,4 L 57.2,4 A 2.8,2.8 0 0 1 60,6.8 L 60,57.2 A 2.8,2.8 0 0 1 57.2,60 L 6.8,60 A 2.8,2.8 0 0 1 4,57.2 L 4,6.8 A 2.8,2.8 0 0 1 6.8,4 z" />
+    <!-- Main "R" logo -->
+    <path
+        android:fillColor="#565656"
+        android:pathData="M 22,18 l 4,6 l -8,0 l -1,4 l -4.5,0 l 1.5,-6 l -3,0 l -3,12 l 2.823529,0 l 4.376471,0 l -1.2,4 l 7,0 l -5,6 l 6,0 l 4,-6 l 12,0 l 4,6 l 6,0 l -5,-6 l 7,0 l -1.2,-4 l 7.2,0 l -3,-12 l -3,0 l 1.5,6 l -4.5,0 l -1,-4 l -8,0 l 4,-6 l -3,0 l -4,6 l -6,0 l -4,-6 z" />
+    <!-- White controller buttons -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 38,27 l 0,5 l 5,0 l 0,-5 l -5,0 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 21,27 l 0,5 l 5,0 l 0,-5 l -5,0 z" />
+</vector>
