@@ -37,6 +37,8 @@ fun SettingsScreen(
     backupInfo: BackupDirectoryInfo?,
     isMigrating: Boolean,
     migrationProgress: Pair<Int, Int>?, // (current, total)
+    maxBackupsPerProfile: Int,
+    onMaxBackupsChange: (Int) -> Unit,
     onBackClick: () -> Unit,
     onBrowseBackupPath: () -> Unit,
     onResetToDefault: () -> Unit,
@@ -71,58 +73,28 @@ fun SettingsScreen(
             
             // Backup Base Path section
             SettingsSection(title = "Backup Base Path") {
-                // Path display with border
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                // Path display (full width)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(DarkSurfaceVariant)
+                        .border(
+                            width = 1.dp,
+                            color = SaveStateRed.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    // Path text field (read-only style)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(DarkSurfaceVariant)
-                            .border(
-                                width = 1.dp,
-                                color = SaveStateRed.copy(alpha = 0.3f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            text = currentBackupPath,
-                            color = TextPrimary,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // Browse button
-                    Button(
-                        onClick = onBrowseBackupPath,
-                        enabled = !isMigrating,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = DarkSurface,
-                            contentColor = TextPrimary,
-                            disabledContainerColor = DarkSurface.copy(alpha = 0.5f),
-                            disabledContentColor = TextMuted
-                        ),
-                        shape = RoundedCornerShape(4.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Browse...")
-                    }
+                    Text(
+                        text = currentBackupPath,
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -197,28 +169,54 @@ fun SettingsScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Reset to default button
-                OutlinedButton(
-                    onClick = onResetToDefault,
-                    enabled = !isMigrating,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = TextSecondary,
-                        disabledContentColor = TextMuted
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isMigrating) TextMuted.copy(alpha = 0.3f) 
-                        else SaveStateRed.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(4.dp)
+                // Browse and Reset buttons row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Reset to Default")
+                    Button(
+                        onClick = onBrowseBackupPath,
+                        enabled = !isMigrating,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DarkSurface,
+                            contentColor = TextPrimary,
+                            disabledContainerColor = DarkSurface.copy(alpha = 0.5f),
+                            disabledContentColor = TextMuted
+                        ),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Browse...")
+                    }
+                    
+                    OutlinedButton(
+                        onClick = onResetToDefault,
+                        enabled = !isMigrating,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = TextSecondary,
+                            disabledContentColor = TextMuted
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isMigrating) TextMuted.copy(alpha = 0.3f) 
+                            else SaveStateRed.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reset Default")
+                    }
                 }
             }
             
@@ -227,7 +225,65 @@ fun SettingsScreen(
             // Placeholder sections for future settings (grayed out)
             FutureSectionPlaceholder(title = "Portable Mode")
             Spacer(modifier = Modifier.height(16.dp))
-            FutureSectionPlaceholder(title = "Maximum Number of Backups per Profile")
+            SettingsSection(title = "Maximum Number of Backups per Profile") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (maxBackupsPerProfile < 0) "Unlimited" else "$maxBackupsPerProfile",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                if (maxBackupsPerProfile > 1) onMaxBackupsChange(maxBackupsPerProfile - 1)
+                            },
+                            enabled = maxBackupsPerProfile > 1,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TextPrimary,
+                                disabledContentColor = TextMuted
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (maxBackupsPerProfile > 1) SaveStateRed.copy(alpha = 0.5f)
+                                else TextMuted.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Text("−", fontSize = 18.sp)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = { onMaxBackupsChange(maxBackupsPerProfile + 1) },
+                            enabled = maxBackupsPerProfile < 99,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TextPrimary,
+                                disabledContentColor = TextMuted
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (maxBackupsPerProfile < 99) SaveStateRed.copy(alpha = 0.5f)
+                                else TextMuted.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Text("+", fontSize = 18.sp)
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             FutureSectionPlaceholder(title = "Maximum Source Size for Backup")
             Spacer(modifier = Modifier.height(16.dp))

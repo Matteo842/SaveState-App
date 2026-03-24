@@ -186,6 +186,7 @@ class MainActivity : ComponentActivity() {
                 var backupInfo by remember { mutableStateOf<BackupDirectoryInfo?>(null) }
                 var isMigrating by remember { mutableStateOf(false) }
                 var migrationProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+                var maxBackupsPerProfile by remember { mutableStateOf(settingsManager.getMaxBackups()) }
                 
                 // Backup operation state
                 var isBackingUp by remember { mutableStateOf(false) }
@@ -240,6 +241,11 @@ class MainActivity : ComponentActivity() {
                         backupInfo = backupInfo,
                         isMigrating = isMigrating,
                         migrationProgress = migrationProgress,
+                        maxBackupsPerProfile = maxBackupsPerProfile,
+                        onMaxBackupsChange = { newValue ->
+                            maxBackupsPerProfile = newValue
+                            settingsManager.setMaxBackups(newValue)
+                        },
                         onBackClick = { showSettingsScreen = false },
                         onBrowseBackupPath = {
                             // Setup callback for when user selects a folder
@@ -350,7 +356,7 @@ class MainActivity : ComponentActivity() {
                             coroutineScope.launch {
                                 val result = backupManager.performBackup(
                                     profile = selectedProfile,
-                                    maxBackups = 3 // TODO: Get from settings
+                                    maxBackups = maxBackupsPerProfile
                                 )
                                 
                                 // Update profile with new backup count/date
