@@ -13,7 +13,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.savestate.app.data.BackupDirectoryInfo
 import com.savestate.app.data.BackupInfo
@@ -35,7 +44,7 @@ import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
 import com.savestate.app.ui.screens.MainScreen
 import com.savestate.app.ui.screens.SettingsScreen
-import com.savestate.app.ui.theme.SaveStateTheme
+import com.savestate.app.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -192,6 +201,7 @@ class MainActivity : ComponentActivity() {
                 
                 // Backup operation state
                 var isBackingUp by remember { mutableStateOf(false) }
+                var backupErrorMessage by remember { mutableStateOf<String?>(null) }
                 
                 // Restore dialog state
                 var showRestoreDialog by remember { mutableStateOf(false) }
@@ -373,7 +383,6 @@ class MainActivity : ComponentActivity() {
                                     compressionLevel = compressionLevel
                                 )
                                 
-                                // Update profile with new backup count/date
                                 if (result.success) {
                                     val (count, lastDate) = backupManager.getBackupStats(selectedProfile)
                                     profiles = profiles.map { p ->
@@ -387,13 +396,15 @@ class MainActivity : ComponentActivity() {
                                         } else p
                                     }
                                     profileRepository.saveProfiles(profiles)
+                                    
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        result.message,
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    backupErrorMessage = result.message
                                 }
-                                
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    result.message,
-                                    if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
-                                ).show()
                                 
                                 isBackingUp = false
                             }
@@ -622,6 +633,61 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismiss = {
                             showManageDialog = false
+                        }
+                    )
+                }
+                
+                // Backup error dialog
+                if (backupErrorMessage != null) {
+                    val profileName = profiles.find { it.id == selectedProfileId }?.name ?: "Unknown"
+                    AlertDialog(
+                        onDismissRequest = { backupErrorMessage = null },
+                        containerColor = DarkSurface,
+                        titleContentColor = SaveStateRed,
+                        textContentColor = TextPrimary,
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = SaveStateRed,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Backup Failed",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    text = "Profile: $profileName",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = backupErrorMessage ?: "",
+                                    color = TextPrimary,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "The source save folder may have been moved, deleted, or permissions were revoked. Try re-selecting the emulator folder and re-adding the profile.",
+                                    color = TextMuted,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = { backupErrorMessage = null },
+                                colors = ButtonDefaults.textButtonColors(contentColor = SaveStateRed)
+                            ) {
+                                Text("OK")
+                            }
                         }
                     )
                 }
