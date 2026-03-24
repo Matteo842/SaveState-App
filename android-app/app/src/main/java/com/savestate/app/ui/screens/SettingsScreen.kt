@@ -41,6 +41,8 @@ fun SettingsScreen(
     onMaxBackupsChange: (Int) -> Unit,
     maxSourceSizeMB: Int,
     onMaxSourceSizeChange: (Int) -> Unit,
+    compressionLevel: Int,
+    onCompressionLevelChange: (Int) -> Unit,
     onBackClick: () -> Unit,
     onBrowseBackupPath: () -> Unit,
     onResetToDefault: () -> Unit,
@@ -361,7 +363,74 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            FutureSectionPlaceholder(title = "Backup Compression")
+            SettingsSection(title = "Backup Compression (.zip)") {
+                val options = listOf(
+                    Triple(6, "Standard", "Recommended"),
+                    Triple(9, "Maximum", "Slower"),
+                    Triple(0, "None", "Faster")
+                )
+                
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.forEach { (level, label, hint) ->
+                        val isSelected = compressionLevel == level
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { onCompressionLevelChange(level) },
+                            color = if (isSelected) SaveStateRed.copy(alpha = 0.15f)
+                                    else DarkSurface,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) SaveStateRed.copy(alpha = 0.6f)
+                                else TextMuted.copy(alpha = 0.2f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .border(
+                                            width = 2.dp,
+                                            color = if (isSelected) SaveStateRed else TextMuted,
+                                            shape = RoundedCornerShape(9.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .background(SaveStateRed, RoundedCornerShape(5.dp))
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) TextPrimary else TextSecondary,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "($hint)",
+                                    color = TextMuted,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             
             Spacer(modifier = Modifier.height(32.dp))
         }

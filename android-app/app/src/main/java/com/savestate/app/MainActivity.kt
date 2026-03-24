@@ -188,6 +188,7 @@ class MainActivity : ComponentActivity() {
                 var migrationProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
                 var maxBackupsPerProfile by remember { mutableStateOf(settingsManager.getMaxBackups()) }
                 var maxSourceSizeMB by remember { mutableStateOf(settingsManager.getMaxSourceSizeMB()) }
+                var compressionLevel by remember { mutableStateOf(settingsManager.getCompressionLevel()) }
                 
                 // Backup operation state
                 var isBackingUp by remember { mutableStateOf(false) }
@@ -251,6 +252,11 @@ class MainActivity : ComponentActivity() {
                         onMaxSourceSizeChange = { newValue ->
                             maxSourceSizeMB = newValue
                             settingsManager.setMaxSourceSizeMB(newValue)
+                        },
+                        compressionLevel = compressionLevel,
+                        onCompressionLevelChange = { newValue ->
+                            compressionLevel = newValue
+                            settingsManager.setCompressionLevel(newValue)
                         },
                         onBackClick = { showSettingsScreen = false },
                         onBrowseBackupPath = {
@@ -363,7 +369,8 @@ class MainActivity : ComponentActivity() {
                                 val result = backupManager.performBackup(
                                     profile = selectedProfile,
                                     maxBackups = maxBackupsPerProfile,
-                                    maxSourceSizeMB = maxSourceSizeMB
+                                    maxSourceSizeMB = maxSourceSizeMB,
+                                    compressionLevel = compressionLevel
                                 )
                                 
                                 // Update profile with new backup count/date

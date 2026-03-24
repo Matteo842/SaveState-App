@@ -25,6 +25,8 @@ class SettingsManager(
         private const val DEFAULT_MAX_BACKUPS = 5
         private const val KEY_MAX_SOURCE_SIZE_MB = "maxSourceSizeMB"
         private const val DEFAULT_MAX_SOURCE_SIZE_MB = 500
+        private const val KEY_COMPRESSION_LEVEL = "compressionLevel"
+        private const val DEFAULT_COMPRESSION_LEVEL = 6
     }
     
     // Fallback internal file
@@ -112,6 +114,34 @@ class SettingsManager(
             writeSettingsJson(obj.toString(2))
         } catch (e: Exception) {
             Log.e(TAG, "Error saving max source size: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Gets compression level: 0 = None, 6 = Standard, 9 = Maximum.
+     */
+    fun getCompressionLevel(): Int {
+        return try {
+            val json = readSettingsJson() ?: return DEFAULT_COMPRESSION_LEVEL
+            val obj = JSONObject(json)
+            obj.optInt(KEY_COMPRESSION_LEVEL, DEFAULT_COMPRESSION_LEVEL)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading compression level: ${e.message}", e)
+            DEFAULT_COMPRESSION_LEVEL
+        }
+    }
+    
+    /**
+     * Sets compression level: 0 = None, 6 = Standard, 9 = Maximum.
+     */
+    fun setCompressionLevel(level: Int) {
+        try {
+            val json = readSettingsJson() ?: "{}"
+            val obj = JSONObject(json)
+            obj.put(KEY_COMPRESSION_LEVEL, level)
+            writeSettingsJson(obj.toString(2))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving compression level: ${e.message}", e)
         }
     }
     

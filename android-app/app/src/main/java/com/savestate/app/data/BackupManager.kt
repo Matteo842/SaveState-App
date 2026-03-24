@@ -60,6 +60,7 @@ class BackupManager(
      * @param profile The game profile to backup
      * @param maxBackups Maximum number of backups to keep (-1 for unlimited)
      * @param maxSourceSizeMB Maximum source size in MB (0 = unlimited)
+     * @param compressionLevel ZIP compression level (0 = none, 6 = standard, 9 = maximum)
      * @param onProgress Optional callback for progress updates (bytesWritten, totalBytes)
      * @return BackupResult with success status and details
      */
@@ -67,6 +68,7 @@ class BackupManager(
         profile: GameProfile,
         maxBackups: Int = 3,
         maxSourceSizeMB: Int = 0,
+        compressionLevel: Int = Deflater.DEFAULT_COMPRESSION,
         onProgress: ((Long, Long) -> Unit)? = null
     ): BackupResult = withContext(Dispatchers.IO) {
         
@@ -75,7 +77,31 @@ class BackupManager(
         try {
             // 1. Validate source path
             val sourceUri = Uri.parse(profile.savePath)
-            val sourceDocument = DocumentFile.fromTreeUri(context, sourceUri)
+            var sourceDocument = DocumentFile.fromTreeUri(context, sourceUri)
+            
+            // Fallback: if tree URI fails, try navigating from parent path
+            if ((sourceDocument == null || !sourceDocument.exists()) && profile.parentPath != null) {
+                Log.w(TAG, "fromTreeUri failed for savePath, trying via parentPath")
+                val parentUri = Uri.parse(profile.parentPath)
+                val parentDoc = DocumentFile.fromTreeUri(context, parentUri)
+                if (parentDoc != null && parentDoc.exists()) {
+                    val folderName = sourceUri.lastPathSegment
+                        ?.substringAfterLast("/")
+                        ?.substringAfterLast("%2F")
+                    if (folderName != null) {
+                        sourceDocument = parentDoc.findFile(folderName)
+                    }
+                    if (sourceDocument == null || !sourceDocument.exists()) {
+                        sourceDocument = parentDoc
+                    }
+                }
+            }
+            
+            // Fallback: try as single document URI
+            if (sourceDocument == null || !sourceDocument.exists()) {
+                Log.w(TAG, "Tree URI failed, trying fromSingleUri")
+                sourceDocument = DocumentFile.fromSingleUri(context, sourceUri)
+            }
             
             if (sourceDocument == null || !sourceDocument.exists()) {
                 return@withContext BackupResult(
@@ -83,6 +109,8 @@ class BackupManager(
                     message = "Source path does not exist: ${profile.savePath}"
                 )
             }
+            
+            Log.i(TAG, "Source validated: ${sourceDocument.name} (uri: ${sourceDocument.uri})")
             
             // 1b. Check source size against limit
             if (maxSourceSizeMB > 0) {
@@ -131,14 +159,14 @@ class BackupManager(
             // Create temp file for ZIP (then copy to SAF)
             val tempFile = File(context.cacheDir, archiveName)
             
-            Log.i(TAG, "Creating backup archive: $archiveName")
+            Log.i(TAG, "Creating backup archive: $archiveName (compression level: $compressionLevel)")
             
             // 4. Calculate total size for progress
             var bytesWritten = 0L
             
             // 5. Create ZIP archive in temp location
             ZipOutputStream(BufferedOutputStream(FileOutputStream(tempFile))).use { zipOut ->
-                zipOut.setLevel(Deflater.DEFAULT_COMPRESSION)
+                zipOut.setLevel(compressionLevel)
                 
                 writeManifest(zipOut, profile, sourceDocument)
                 
@@ -176,16 +204,27 @@ class BackupManager(
                 }
             }
             
+            val archiveBytes = tempFile.length()
+            val archiveSizeFormatted = when {
+                archiveBytes >= 1024 * 1024 -> String.format("%.2f MB", archiveBytes / (1024.0 * 1024.0))
+                archiveBytes >= 1024 -> String.format("%.2f KB", archiveBytes / 1024.0)
+                else -> "$archiveBytes B"
+            }
+            Log.i(TAG, "Backup archive created: $archiveName (size: $archiveSizeFormatted, compression: $compressionLevel)")
+            
             // Delete temp file
             tempFile.delete()
-            
-            Log.i(TAG, "Backup archive created successfully: $archiveName")
             
             // 7. Manage old backups (rotation)
             val deletedCount = manageOldBackupsSAF(profileBackupDoc, maxBackups)
             
+            val compressionLabel = when (compressionLevel) {
+                0 -> "None"
+                9 -> "Maximum"
+                else -> "Standard"
+            }
             val message = buildString {
-                append("Backup completed successfully:\n'$archiveName'")
+                append("Backup completed! ($archiveSizeFormatted, $compressionLabel)")
                 if (deletedCount > 0) {
                     append("\nDeleted $deletedCount old backup(s).")
                 }
