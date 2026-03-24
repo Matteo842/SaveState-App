@@ -81,13 +81,15 @@ fun MainScreen(
                     onFavoriteToggle = onFavoriteToggle,
                     onDeleteProfile = onDeleteProfile,
                     compact = true,
+                    showSectionTitle = false,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                 )
+                // Compact side rail (~10% narrower than previous step) → more width for profile list
                 Column(
                     modifier = Modifier
-                        .widthIn(min = 188.dp, max = 248.dp)
+                        .widthIn(min = 128.dp, max = 168.dp)
                         .fillMaxHeight()
                         .verticalScroll(sideRailScroll),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -160,16 +162,19 @@ fun ProfilesSection(
     onFavoriteToggle: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
-    compact: Boolean = false
+    compact: Boolean = false,
+    /** Landscape: hide red "Profiles" label to free vertical space for the list */
+    showSectionTitle: Boolean = true
 ) {
     // Favorites first; stable sort keeps prior order within favorites / non-favorites
     val displayProfiles = remember(profiles) {
         profiles.sortedWith(compareByDescending<GameProfile> { it.isFavorite })
     }
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight()) {
-        // Section header
-        SectionHeader(title = "Profiles", compact = compact)
-        
+        if (showSectionTitle) {
+            SectionHeader(title = "Profiles", compact = compact)
+        }
+
         // Profile list container with border (like desktop group box)
         Surface(
             modifier = Modifier
