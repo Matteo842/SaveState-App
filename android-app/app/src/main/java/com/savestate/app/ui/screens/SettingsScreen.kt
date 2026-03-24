@@ -39,6 +39,8 @@ fun SettingsScreen(
     migrationProgress: Pair<Int, Int>?, // (current, total)
     maxBackupsPerProfile: Int,
     onMaxBackupsChange: (Int) -> Unit,
+    maxSourceSizeMB: Int,
+    onMaxSourceSizeChange: (Int) -> Unit,
     onBackClick: () -> Unit,
     onBrowseBackupPath: () -> Unit,
     onResetToDefault: () -> Unit,
@@ -285,7 +287,79 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            FutureSectionPlaceholder(title = "Maximum Source Size for Backup")
+            SettingsSection(title = "Maximum Source Size for Backup") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (maxSourceSizeMB <= 0) "Unlimited" else "$maxSourceSizeMB MB",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val step = when {
+                                    maxSourceSizeMB > 1000 -> 500
+                                    maxSourceSizeMB > 100 -> 100
+                                    else -> 50
+                                }
+                                val newVal = (maxSourceSizeMB - step).coerceAtLeast(50)
+                                onMaxSourceSizeChange(newVal)
+                            },
+                            enabled = maxSourceSizeMB > 50,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TextPrimary,
+                                disabledContentColor = TextMuted
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (maxSourceSizeMB > 50) SaveStateRed.copy(alpha = 0.5f)
+                                else TextMuted.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Text("−", fontSize = 18.sp)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = {
+                                val step = when {
+                                    maxSourceSizeMB >= 1000 -> 500
+                                    maxSourceSizeMB >= 100 -> 100
+                                    else -> 50
+                                }
+                                val newVal = (maxSourceSizeMB + step).coerceAtMost(5000)
+                                onMaxSourceSizeChange(newVal)
+                            },
+                            enabled = maxSourceSizeMB < 5000,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TextPrimary,
+                                disabledContentColor = TextMuted
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (maxSourceSizeMB < 5000) SaveStateRed.copy(alpha = 0.5f)
+                                else TextMuted.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Text("+", fontSize = 18.sp)
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             FutureSectionPlaceholder(title = "Backup Compression")
             

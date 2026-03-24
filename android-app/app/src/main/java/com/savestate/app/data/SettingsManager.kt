@@ -23,6 +23,8 @@ class SettingsManager(
         private const val SETTINGS_FILE = "settings.json"
         private const val KEY_MAX_BACKUPS = "maxBackups"
         private const val DEFAULT_MAX_BACKUPS = 5
+        private const val KEY_MAX_SOURCE_SIZE_MB = "maxSourceSizeMB"
+        private const val DEFAULT_MAX_SOURCE_SIZE_MB = 500
     }
     
     // Fallback internal file
@@ -82,6 +84,34 @@ class SettingsManager(
             writeSettingsJson(obj.toString(2))
         } catch (e: Exception) {
             Log.e(TAG, "Error saving max backups: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Gets maximum source size for backup in MB (0 = unlimited).
+     */
+    fun getMaxSourceSizeMB(): Int {
+        return try {
+            val json = readSettingsJson() ?: return DEFAULT_MAX_SOURCE_SIZE_MB
+            val obj = JSONObject(json)
+            obj.optInt(KEY_MAX_SOURCE_SIZE_MB, DEFAULT_MAX_SOURCE_SIZE_MB)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading max source size: ${e.message}", e)
+            DEFAULT_MAX_SOURCE_SIZE_MB
+        }
+    }
+    
+    /**
+     * Sets maximum source size for backup in MB (0 = unlimited).
+     */
+    fun setMaxSourceSizeMB(sizeMB: Int) {
+        try {
+            val json = readSettingsJson() ?: "{}"
+            val obj = JSONObject(json)
+            obj.put(KEY_MAX_SOURCE_SIZE_MB, sizeMB)
+            writeSettingsJson(obj.toString(2))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving max source size: ${e.message}", e)
         }
     }
     

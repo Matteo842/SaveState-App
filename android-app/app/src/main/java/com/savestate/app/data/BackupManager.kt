@@ -59,12 +59,14 @@ class BackupManager(
      * 
      * @param profile The game profile to backup
      * @param maxBackups Maximum number of backups to keep (-1 for unlimited)
+     * @param maxSourceSizeMB Maximum source size in MB (0 = unlimited)
      * @param onProgress Optional callback for progress updates (bytesWritten, totalBytes)
      * @return BackupResult with success status and details
      */
     suspend fun performBackup(
         profile: GameProfile,
         maxBackups: Int = 3,
+        maxSourceSizeMB: Int = 0,
         onProgress: ((Long, Long) -> Unit)? = null
     ): BackupResult = withContext(Dispatchers.IO) {
         
@@ -80,6 +82,23 @@ class BackupManager(
                     success = false,
                     message = "Source path does not exist: ${profile.savePath}"
                 )
+            }
+            
+            // 1b. Check source size against limit
+            if (maxSourceSizeMB > 0) {
+                val sourceSize = if (profile.gameFilePrefix != null) {
+                    calculateFilteredSize(sourceDocument, profile.gameFilePrefix)
+                } else {
+                    calculateTotalSize(sourceDocument)
+                }
+                val maxBytes = maxSourceSizeMB.toLong() * 1024L * 1024L
+                if (sourceSize > maxBytes) {
+                    val sizeMB = String.format("%.1f", sourceSize / (1024.0 * 1024.0))
+                    return@withContext BackupResult(
+                        success = false,
+                        message = "Source size (${sizeMB} MB) exceeds the maximum allowed (${maxSourceSizeMB} MB).\nYou can increase this limit in Settings."
+                    )
+                }
             }
             
             // 2. Get backup directory from settings (SAF)
