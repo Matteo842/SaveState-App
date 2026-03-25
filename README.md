@@ -49,12 +49,6 @@ The app is now **functional** and can be used to:
   <img src="images/Screenshot.png" alt="SaveState App Screenshot" width="300">
 </p>
 
-## ⬇️ Download
-
-Check the [Releases](https://github.com/Matteo842/SaveState-App/releases) page for APK downloads.
-
-> ⚠️ **Note:** Current releases are pre-release builds. Some features may be incomplete or unstable.
-
 ## 🚀 Getting Started
 
 1. **Install the APK** from the Releases page
@@ -69,22 +63,6 @@ Your profiles and backups are saved to the folder you select. This means:
 - ✅ Backups survive app uninstallation
 - ✅ Reinstall the app and select the same folder to restore everything
 - ✅ You control where your data is stored
-
-## 🛠️ Building from Source
-
-### Requirements
-- Android Studio Hedgehog or newer
-- JDK 17+
-- Android SDK 34
-
-### Build Steps
-```bash
-git clone https://github.com/Matteo842/SaveState-App.git
-cd SaveState-App/android-app
-./gradlew assembleDebug
-```
-
-The APK will be generated in `app/build/outputs/apk/debug/`
 
 ## 🗺️ Roadmap
 
