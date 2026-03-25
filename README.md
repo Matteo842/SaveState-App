@@ -92,6 +92,4 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 **Created by [Matteo842](https://github.com/Matteo842)**
 
-⭐ Star this repo if you find it useful!
-
 </div>
