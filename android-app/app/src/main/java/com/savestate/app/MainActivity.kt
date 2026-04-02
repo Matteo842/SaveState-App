@@ -30,7 +30,10 @@ import com.savestate.app.data.BackupManager
 import com.savestate.app.data.ConfigManager
 import com.savestate.app.data.EmulatorDetector
 import com.savestate.app.data.GameScanner
+import com.savestate.app.data.DolphinManager
+import com.savestate.app.data.DuckStationManager
 import com.savestate.app.data.RetroArchManager
+import com.savestate.app.data.RootAccessHelper
 import com.savestate.app.data.ProfileRepository
 import com.savestate.app.data.SettingsManager
 import com.savestate.app.data.SfoParser
@@ -60,6 +63,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var emulatorDetector: EmulatorDetector
     private lateinit var gameScanner: GameScanner
     private lateinit var retroArchManager: RetroArchManager
+    private lateinit var dolphinManager: DolphinManager
+    private lateinit var duckStationManager: DuckStationManager
+    private lateinit var rootAccessHelper: RootAccessHelper
     private lateinit var configManager: ConfigManager
     private lateinit var settingsManager: SettingsManager
     private lateinit var backupManager: BackupManager
@@ -147,9 +153,12 @@ class MainActivity : ComponentActivity() {
         emulatorDetector = EmulatorDetector(applicationContext)
         gameScanner = GameScanner()
         retroArchManager = RetroArchManager()
+        dolphinManager = DolphinManager()
+        duckStationManager = DuckStationManager()
+        rootAccessHelper = RootAccessHelper()
         configManager = ConfigManager(applicationContext)
         settingsManager = SettingsManager(applicationContext, configManager)
-        backupManager = BackupManager(applicationContext, settingsManager)
+        backupManager = BackupManager(applicationContext, settingsManager, rootAccessHelper)
         profileRepository = ProfileRepository(applicationContext, configManager)
         
         // Initialize PSP game database from assets
@@ -198,6 +207,7 @@ class MainActivity : ComponentActivity() {
                 var maxBackupsPerProfile by remember { mutableStateOf(settingsManager.getMaxBackups()) }
                 var maxSourceSizeMB by remember { mutableStateOf(settingsManager.getMaxSourceSizeMB()) }
                 var compressionLevel by remember { mutableStateOf(settingsManager.getCompressionLevel()) }
+                var isRootModeEnabled by remember { mutableStateOf(settingsManager.isRootModeEnabled()) }
                 
                 // Backup operation state
                 var isBackingUp by remember { mutableStateOf(false) }
@@ -238,12 +248,26 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                // Function to open folder picker directly
+                // Function to open folder picker or start root scan
                 fun openFolderPickerForEmulator(emulator: EmulatorInfo) {
                     showGameDialog = true
-                    isLoadingGames = false
                     currentEmulator = emulator
-                    detectedGames = emptyList() // Start with empty list - user must select folder
+                    detectedGames = emptyList()
+                    
+                    if (emulator.requiresRoot && isRootModeEnabled) {
+                        // Root mode: auto-scan known protected paths
+                        isLoadingGames = true
+                        coroutineScope.launch {
+                            val games = withContext(Dispatchers.IO) {
+                                scanRootEmulatorPaths(emulator)
+                            }
+                            detectedGames = games
+                            isLoadingGames = false
+                        }
+                    } else {
+                        // Normal SAF mode: user must select folder
+                        isLoadingGames = false
+                    }
                 }
                 
                 // Navigation: Show either MainScreen or SettingsScreen
@@ -267,6 +291,34 @@ class MainActivity : ComponentActivity() {
                         onCompressionLevelChange = { newValue ->
                             compressionLevel = newValue
                             settingsManager.setCompressionLevel(newValue)
+                        },
+                        isRootModeEnabled = isRootModeEnabled,
+                        onRootModeChange = { enabled ->
+                            if (enabled) {
+                                coroutineScope.launch {
+                                    val hasRoot = withContext(Dispatchers.IO) {
+                                        rootAccessHelper.isRootAvailable()
+                                    }
+                                    if (hasRoot) {
+                                        isRootModeEnabled = true
+                                        settingsManager.setRootModeEnabled(true)
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Root access granted!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Root access denied. Is your device rooted?",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            } else {
+                                isRootModeEnabled = false
+                                settingsManager.setRootModeEnabled(false)
+                            }
                         },
                         onBackClick = { showSettingsScreen = false },
                         onBrowseBackupPath = {
@@ -472,6 +524,7 @@ class MainActivity : ComponentActivity() {
                     SelectEmulatorDialog(
                         installedEmulators = installedEmulators,
                         isLoading = isLoadingEmulators,
+                        isRootModeEnabled = isRootModeEnabled,
                         onEmulatorSelected = { emulator ->
                             selectedEmulator = emulator
                             showEmulatorDialog = false
@@ -492,15 +545,15 @@ class MainActivity : ComponentActivity() {
                         emulator = selectedEmulator!!,
                         detectedGames = detectedGames,
                         isLoading = isLoadingGames,
+                        isRootMode = selectedEmulator!!.requiresRoot && isRootModeEnabled,
                         onGameSelected = { game ->
                             showGameDialog = false
                             
-                            // For RetroArch, store the base ROM name as file prefix
-                            val filePrefix = if (game.emulatorType == Emulator.RETROARCH) {
-                                game.gameId
-                            } else null
+                            // File-prefix backup for emulators that store saves as flat files
+                            val filePrefix = game.gameFilePrefix
                             
                             // Create a new profile with the selected game
+                            val isRoot = selectedEmulator!!.requiresRoot && isRootModeEnabled
                             val newProfile = GameProfile(
                                 id = UUID.randomUUID().toString(),
                                 name = game.gameName,
@@ -510,7 +563,8 @@ class MainActivity : ComponentActivity() {
                                 backupCount = 0,
                                 lastBackup = null,
                                 isFavorite = false,
-                                gameFilePrefix = filePrefix
+                                gameFilePrefix = filePrefix,
+                                requiresRoot = isRoot
                             )
                             
                             // Check if profile already exists
@@ -731,6 +785,8 @@ class MainActivity : ComponentActivity() {
                 val emulatorType = currentEmulator?.emulatorType
                 val games = when (emulatorType) {
                     Emulator.RETROARCH -> scanRetroArchSafFolder(documentFile)
+                    Emulator.DOLPHIN -> scanDolphinSafFolder(documentFile)
+                    Emulator.DUCKSTATION -> scanDuckStationSafFolder(documentFile)
                     else -> scanPPSSPPSafFolder(documentFile)
                 }
                 
@@ -825,6 +881,35 @@ class MainActivity : ComponentActivity() {
      */
     private fun scanRetroArchSafFolder(documentFile: DocumentFile): List<DetectedGame> {
         return retroArchManager.scanSafFolder(documentFile)
+    }
+    
+    /**
+     * Scan a SAF folder for Dolphin saves — delegates to DolphinManager.
+     */
+    private fun scanDolphinSafFolder(documentFile: DocumentFile): List<DetectedGame> {
+        return dolphinManager.scanSafFolder(documentFile)
+    }
+    
+    /**
+     * Scan a SAF folder for DuckStation saves — delegates to DuckStationManager.
+     */
+    private fun scanDuckStationSafFolder(documentFile: DocumentFile): List<DetectedGame> {
+        return duckStationManager.scanSafFolder(documentFile)
+    }
+    
+    /**
+     * Scan root-protected save paths for a given emulator via su.
+     * Called when root mode is enabled and a root-only emulator is selected.
+     */
+    private fun scanRootEmulatorPaths(emulator: EmulatorInfo): List<DetectedGame> {
+        val rootPaths = emulator.rootSavePaths
+        if (rootPaths.isEmpty()) return emptyList()
+        
+        return when (emulator.emulatorType) {
+            Emulator.DOLPHIN -> dolphinManager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.DUCKSTATION -> duckStationManager.scanRootPaths(rootAccessHelper, rootPaths)
+            else -> emptyList()
+        }
     }
     
     /**

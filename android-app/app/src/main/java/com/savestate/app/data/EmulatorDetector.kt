@@ -52,7 +52,9 @@ class EmulatorDetector(private val context: Context) {
                             emulatorType = definition.emulatorType,
                             icon = appIcon,
                             isInstalled = true,
-                            defaultSavePaths = definition.defaultSavePaths
+                            defaultSavePaths = definition.defaultSavePaths,
+                            requiresRoot = definition.requiresRoot,
+                            rootSavePaths = definition.rootSavePaths
                         )
                     )
                     
@@ -125,7 +127,9 @@ class EmulatorDetector(private val context: Context) {
                         emulatorType = knownDefinition.emulatorType,
                         icon = appIcon,
                         isInstalled = true,
-                        defaultSavePaths = knownDefinition.defaultSavePaths
+                        defaultSavePaths = knownDefinition.defaultSavePaths,
+                        requiresRoot = knownDefinition.requiresRoot,
+                        rootSavePaths = knownDefinition.rootSavePaths
                     )
                 )
             }

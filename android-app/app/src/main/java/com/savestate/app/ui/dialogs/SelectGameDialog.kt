@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -43,6 +44,7 @@ fun SelectGameDialog(
     emulator: EmulatorInfo,
     detectedGames: List<DetectedGame>,
     isLoading: Boolean = false,
+    isRootMode: Boolean = false,
     onGameSelected: (DetectedGame) -> Unit,
     onBrowseFolder: () -> Unit = {},
     onDismiss: () -> Unit
@@ -89,18 +91,24 @@ fun SelectGameDialog(
                                 modifier = Modifier.size(48.dp)
                             )
                             Text(
-                                text = "Scanning folder...",
+                                text = if (isRootMode) "Scanning with root access..."
+                                       else "Scanning folder...",
                                 color = TextSecondary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
                 } else if (detectedGames.isEmpty()) {
-                    // Initial state - ask user to select folder
-                    SelectFolderPrompt(
-                        emulatorName = emulator.emulatorType.displayName,
-                        onBrowseFolder = onBrowseFolder
-                    )
+                    if (isRootMode) {
+                        // Root mode empty: scan found nothing
+                        RootEmptyState(emulatorName = emulator.emulatorType.displayName)
+                    } else {
+                        // Normal mode: ask user to select folder
+                        SelectFolderPrompt(
+                            emulatorName = emulator.emulatorType.displayName,
+                            onBrowseFolder = onBrowseFolder
+                        )
+                    }
                 } else {
                     // Games list with subtitle
                     Column(modifier = Modifier.weight(1f)) {
@@ -208,12 +216,13 @@ private fun SelectFolderPrompt(
     onBrowseFolder: () -> Unit
 ) {
     val isRetroArch = emulatorName == "RetroArch"
+    val isDolphin = emulatorName == "Dolphin"
     
     // Get folder structure based on emulator
     val folderPath = when (emulatorName) {
         "PPSSPP" -> "PSP/SAVEDATA"
         "RetroArch" -> "RetroArch/saves  or  RetroArch/states"
-        "Dolphin" -> "dolphin-emu/Wii/title"
+        "Dolphin" -> "dolphin-emu"
         "DuckStation" -> "duckstation/memcards"
         "Citra" -> "citra-emu/sdmc"
         "Azahar" -> "azahar-emu/sdmc"
@@ -283,6 +292,17 @@ private fun SelectFolderPrompt(
             )
         }
         
+        // Dolphin-specific hint
+        if (isDolphin) {
+            Text(
+                text = "Select the root folder or a subfolder:\n• GC → GameCube memory card saves\n• Wii → Wii NAND saves\n• StateSaves → save states",
+                color = TextMuted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp
+            )
+        }
+        
         // Big prominent button — FIRST, always visible
         Button(
             onClick = onBrowseFolder,
@@ -326,16 +346,58 @@ private fun SelectFolderPrompt(
                     modifier = Modifier.padding(top = 1.dp)
                 )
                 Text(
-                    text = if (isRetroArch)
-                        "Make sure RetroArch saves to an accessible folder (e.g. Internal Storage/RetroArch), not the default Android/data location."
-                    else
-                        "If you haven't set a custom save folder in your emulator, the default Android/data location may not be accessible.",
+                    text = when {
+                        isRetroArch -> "Make sure RetroArch saves to an accessible folder (e.g. Internal Storage/RetroArch), not the default Android/data location."
+                        isDolphin -> "Make sure Dolphin's user directory is set to an accessible folder (e.g. Internal Storage/dolphin-emu)."
+                        else -> "If you haven't set a custom save folder in your emulator, the default Android/data location may not be accessible."
+                    },
                     color = TextSecondary,
                     fontSize = 11.sp,
                     lineHeight = 15.sp
                 )
             }
         }
+    }
+}
+
+/**
+ * Shown when a root scan completes but finds no saves.
+ */
+@Composable
+private fun RootEmptyState(emulatorName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(modifier = Modifier.weight(1f, fill = false))
+
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+            tint = TextMuted
+        )
+
+        Text(
+            text = "No Saves Found",
+            color = TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            text = "No save data was found in $emulatorName's protected folders.\nMake sure the emulator has been launched at least once and has save data.",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+
+        Spacer(modifier = Modifier.weight(1f, fill = false))
     }
 }
 

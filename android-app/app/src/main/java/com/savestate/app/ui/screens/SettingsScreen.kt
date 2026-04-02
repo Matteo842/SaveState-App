@@ -43,6 +43,8 @@ fun SettingsScreen(
     onMaxSourceSizeChange: (Int) -> Unit,
     compressionLevel: Int,
     onCompressionLevelChange: (Int) -> Unit,
+    isRootModeEnabled: Boolean = false,
+    onRootModeChange: (Boolean) -> Unit = {},
     onBackClick: () -> Unit,
     onBrowseBackupPath: () -> Unit,
     onResetToDefault: () -> Unit,
@@ -226,8 +228,41 @@ fun SettingsScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Placeholder sections for future settings (grayed out)
-            FutureSectionPlaceholder(title = "Portable Mode")
+            // Root Mode section
+            SettingsSection(title = "Root Mode") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isRootModeEnabled) "Enabled" else "Disabled",
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Access saves in protected Android/data folders (Dolphin, DuckStation). Requires a rooted device.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = isRootModeEnabled,
+                        onCheckedChange = { onRootModeChange(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = SaveStateRed,
+                            checkedTrackColor = SaveStateRed.copy(alpha = 0.4f),
+                            uncheckedThumbColor = TextMuted,
+                            uncheckedTrackColor = DarkSurface
+                        )
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             SettingsSection(title = "Maximum Number of Backups per Profile") {
                 Row(

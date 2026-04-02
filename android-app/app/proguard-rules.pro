@@ -4,3 +4,6 @@
 
 # Keep Compose
 -keep class androidx.compose.** { *; }
+
+# libsu (root access)
+-keep class com.topjohnwu.superuser.** { *; }

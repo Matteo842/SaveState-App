@@ -12,3 +12,5 @@
 /android-app/savestate-release.keystore
 /android-app/local.properties
 /tools
+/.idea
+AS-key

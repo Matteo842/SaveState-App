@@ -134,7 +134,8 @@ class RetroArchManager {
                 parentPath = folderUri,
                 emulatorType = Emulator.RETROARCH,
                 saveCount = files.size,
-                lastModified = latestModified
+                lastModified = latestModified,
+                gameFilePrefix = baseName
             )
         }
 
@@ -214,7 +215,8 @@ class RetroArchManager {
                     parentPath = directory.absolutePath,
                     emulatorType = Emulator.RETROARCH,
                     saveCount = files.size,
-                    lastModified = files.maxOfOrNull { it.lastModified() } ?: 0L
+                    lastModified = files.maxOfOrNull { it.lastModified() } ?: 0L,
+                    gameFilePrefix = baseName
                 )
             }
         } catch (e: Exception) {

@@ -8,13 +8,14 @@ data class GameProfile(
     val id: String,
     val name: String,
     val emulator: String,
-    val savePath: String,           // URI to specific game save folder (e.g., UCUS98653DATA00)
-    val parentPath: String? = null, // URI to parent folder (e.g., SAVEDATA) - for restore
+    val savePath: String,           // URI (SAF) or file path (root) to save folder
+    val parentPath: String? = null, // URI/path to parent folder - for restore
     val backupCount: Int = 0,
     val lastBackup: String? = null, // Format: "DD/MM/YYYY HH:mm"
     val isFavorite: Boolean = false,
-    val iconResId: Int? = null, // Resource ID for emulator icon
-    val gameFilePrefix: String? = null // Base ROM name for file-level filtering (RetroArch)
+    val iconResId: Int? = null,
+    val gameFilePrefix: String? = null, // Base ROM name for file-level filtering (RetroArch)
+    val requiresRoot: Boolean = false   // When true, savePath is a file path accessed via root
 )
 
 /**

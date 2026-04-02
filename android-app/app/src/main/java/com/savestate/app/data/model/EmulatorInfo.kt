@@ -11,7 +11,9 @@ data class EmulatorInfo(
     val emulatorType: Emulator,
     val icon: Drawable?,
     val isInstalled: Boolean = true,
-    val defaultSavePaths: List<String> = emptyList()
+    val defaultSavePaths: List<String> = emptyList(),
+    val requiresRoot: Boolean = false,
+    val rootSavePaths: List<String> = emptyList()
 )
 
 /**
@@ -24,7 +26,8 @@ data class DetectedGame(
     val parentPath: String? = null, // Path to parent folder (e.g., SAVEDATA) - for restore
     val emulatorType: Emulator,
     val saveCount: Int = 0,      // Number of save files found
-    val lastModified: Long = 0   // Last modification timestamp
+    val lastModified: Long = 0,  // Last modification timestamp
+    val gameFilePrefix: String? = null // Base name for file-level backup filtering (RetroArch, Dolphin states)
 )
 
 /**
@@ -36,7 +39,9 @@ object EmulatorConfig {
         val emulatorType: Emulator,
         val packageNames: List<String>,
         val displayName: String,
-        val defaultSavePaths: List<String>
+        val defaultSavePaths: List<String>,
+        val requiresRoot: Boolean = false,
+        val rootSavePaths: List<String> = emptyList()
     )
     
     // PPSSPP specific paths - checked in order of priority
@@ -84,7 +89,7 @@ object EmulatorConfig {
             )
         ),
         
-        // Dolphin - GameCube/Wii emulator
+        // Dolphin - GameCube/Wii emulator (requires root for Android/data access)
         EmulatorDefinition(
             emulatorType = Emulator.DOLPHIN,
             packageNames = listOf(
@@ -94,12 +99,19 @@ object EmulatorConfig {
             ),
             displayName = "Dolphin",
             defaultSavePaths = listOf(
-                "/storage/emulated/0/dolphin-emu/Wii/title",
-                "/storage/emulated/0/dolphin-emu/GC"
+                "/storage/emulated/0/dolphin-emu/GC",
+                "/storage/emulated/0/dolphin-emu/Wii",
+                "/storage/emulated/0/dolphin-emu/StateSaves"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/org.dolphinemu.dolphinemu/files",
+                "/storage/emulated/0/Android/data/org.dolphinemu.dolphinemu.mmjr/files",
+                "/storage/emulated/0/Android/data/org.dolphinemu.dolphinemu.mmjr2/files"
             )
         ),
         
-        // DuckStation - PlayStation emulator
+        // DuckStation - PlayStation emulator (requires root for Android/data access)
         EmulatorDefinition(
             emulatorType = Emulator.DUCKSTATION,
             packageNames = listOf(
@@ -109,6 +121,10 @@ object EmulatorConfig {
             defaultSavePaths = listOf(
                 "/storage/emulated/0/duckstation/memcards",
                 "/storage/emulated/0/duckstation/savestates"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/com.github.stenzek.duckstation/files"
             )
         ),
         

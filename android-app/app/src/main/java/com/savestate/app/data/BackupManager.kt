@@ -28,7 +28,8 @@ import java.util.zip.ZipOutputStream
  */
 class BackupManager(
     private val context: Context,
-    private val settingsManager: SettingsManager
+    private val settingsManager: SettingsManager,
+    private val rootAccessHelper: RootAccessHelper? = null
 ) {
     companion object {
         private const val TAG = "BackupManager"
@@ -74,33 +75,60 @@ class BackupManager(
         
         Log.i(TAG, "Starting backup for profile: '${profile.name}'")
         
+        // Temp directory used when backing up root-protected paths
+        var rootTempDir: File? = null
+        
         try {
             // 1. Validate source path
-            val sourceUri = Uri.parse(profile.savePath)
-            var sourceDocument = DocumentFile.fromTreeUri(context, sourceUri)
+            var sourceDocument: DocumentFile?
             
-            // Fallback: if tree URI fails, try navigating from parent path
-            if ((sourceDocument == null || !sourceDocument.exists()) && profile.parentPath != null) {
-                Log.w(TAG, "fromTreeUri failed for savePath, trying via parentPath")
-                val parentUri = Uri.parse(profile.parentPath)
-                val parentDoc = DocumentFile.fromTreeUri(context, parentUri)
-                if (parentDoc != null && parentDoc.exists()) {
-                    val folderName = sourceUri.lastPathSegment
-                        ?.substringAfterLast("/")
-                        ?.substringAfterLast("%2F")
-                    if (folderName != null) {
-                        sourceDocument = parentDoc.findFile(folderName)
-                    }
-                    if (sourceDocument == null || !sourceDocument.exists()) {
-                        sourceDocument = parentDoc
+            if (profile.requiresRoot && rootAccessHelper != null) {
+                // Root mode: copy from protected path to cache, then work with cache copy
+                Log.i(TAG, "Root backup: copying from ${profile.savePath}")
+                val tempDir = File(context.cacheDir, "root_backup_temp")
+                tempDir.deleteRecursively()
+                tempDir.mkdirs()
+                
+                val copyOk = rootAccessHelper.copyToCache(profile.savePath, tempDir)
+                if (!copyOk || !tempDir.exists() || (tempDir.listFiles()?.isEmpty() != false)) {
+                    tempDir.deleteRecursively()
+                    return@withContext BackupResult(
+                        success = false,
+                        message = "Root: failed to copy saves from protected path.\nCheck root permissions."
+                    )
+                }
+                
+                rootTempDir = tempDir
+                sourceDocument = DocumentFile.fromFile(tempDir)
+                Log.i(TAG, "Root copy complete, temp dir has ${tempDir.listFiles()?.size} items")
+            } else {
+                // Normal SAF mode
+                val sourceUri = Uri.parse(profile.savePath)
+                sourceDocument = DocumentFile.fromTreeUri(context, sourceUri)
+                
+                // Fallback: if tree URI fails, try navigating from parent path
+                if ((sourceDocument == null || !sourceDocument.exists()) && profile.parentPath != null) {
+                    Log.w(TAG, "fromTreeUri failed for savePath, trying via parentPath")
+                    val parentUri = Uri.parse(profile.parentPath)
+                    val parentDoc = DocumentFile.fromTreeUri(context, parentUri)
+                    if (parentDoc != null && parentDoc.exists()) {
+                        val folderName = sourceUri.lastPathSegment
+                            ?.substringAfterLast("/")
+                            ?.substringAfterLast("%2F")
+                        if (folderName != null) {
+                            sourceDocument = parentDoc.findFile(folderName)
+                        }
+                        if (sourceDocument == null || !sourceDocument.exists()) {
+                            sourceDocument = parentDoc
+                        }
                     }
                 }
-            }
-            
-            // Fallback: try as single document URI
-            if (sourceDocument == null || !sourceDocument.exists()) {
-                Log.w(TAG, "Tree URI failed, trying fromSingleUri")
-                sourceDocument = DocumentFile.fromSingleUri(context, sourceUri)
+                
+                // Fallback: try as single document URI
+                if (sourceDocument == null || !sourceDocument.exists()) {
+                    Log.w(TAG, "Tree URI failed, trying fromSingleUri")
+                    sourceDocument = DocumentFile.fromSingleUri(context, sourceUri)
+                }
             }
             
             if (sourceDocument == null || !sourceDocument.exists()) {
@@ -215,6 +243,9 @@ class BackupManager(
             // Delete temp file
             tempFile.delete()
             
+            // Clean up root temp directory
+            rootTempDir?.deleteRecursively()
+            
             // 7. Manage old backups (rotation)
             val deletedCount = manageOldBackupsSAF(profileBackupDoc, maxBackups)
             
@@ -239,12 +270,14 @@ class BackupManager(
             
         } catch (e: SecurityException) {
             Log.e(TAG, "Security error during backup: ${e.message}", e)
+            rootTempDir?.deleteRecursively()
             BackupResult(
                 success = false,
                 message = "Permission denied: Cannot access save files.\nPlease re-select the save folder."
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error during backup: ${e.message}", e)
+            rootTempDir?.deleteRecursively()
             BackupResult(
                 success = false,
                 message = "Backup failed: ${e.message}"
@@ -325,20 +358,24 @@ class BackupManager(
                 )
             }
             
-            // 2. Get the PARENT folder where we extract to
-            // profile.parentPath points to: SAVEDATA (where we have SAF permissions)
-            // profile.savePath points to: SAVEDATA/UCUS98653DATA00 (may not exist)
-            // We extract to parentPath, and ZIP structure (UCUS98653DATA00/...) is preserved
-            
+            // 2. Determine extract target
+            val isRootRestore = profile.requiresRoot && rootAccessHelper != null
             val extractTarget: DocumentFile?
+            var rootRestoreTempDir: File? = null
             
-            if (profile.parentPath != null) {
-                // Use stored parent path (preferred - we have permissions on this)
+            if (isRootRestore) {
+                // Root mode: extract to cache, then copy to protected path via root
+                val tempDir = File(context.cacheDir, "root_restore_temp")
+                tempDir.deleteRecursively()
+                tempDir.mkdirs()
+                rootRestoreTempDir = tempDir
+                extractTarget = DocumentFile.fromFile(tempDir)
+                Log.d(TAG, "Root restore: extracting to cache first")
+            } else if (profile.parentPath != null) {
                 val parentUri = Uri.parse(profile.parentPath)
                 extractTarget = DocumentFile.fromTreeUri(context, parentUri)
                 Log.d(TAG, "Using stored parentPath: ${profile.parentPath}")
             } else {
-                // Fallback: try to get parent from savePath (may fail if folder deleted)
                 val destUri = Uri.parse(profile.savePath)
                 val saveDocument = DocumentFile.fromTreeUri(context, destUri)
                 extractTarget = saveDocument?.parentFile ?: saveDocument
@@ -363,27 +400,18 @@ class BackupManager(
             
             Log.d(TAG, "ZIP contains ${entries.size} entries, ${fileEntries.size} files to restore")
             
-            // 4. Extract files to parent with FULL path structure
-            // ZIP has: UCUS98653DATA00/PARAM.SFO
-            // We extract to: SAVEDATA/UCUS98653DATA00/PARAM.SFO
-            // This recreates the folder if it was deleted!
+            // 4. Extract files
             for (entry in fileEntries) {
                 try {
-                    // Skip manifest
                     if (entry.name.startsWith("savestate/")) continue
-                    
-                    // Security check: prevent path traversal
                     if (entry.name.contains("..")) {
                         Log.w(TAG, "Skipping unsafe path: ${entry.name}")
                         continue
                     }
                     
-                    // Keep FULL path - this includes the game folder name
                     val pathParts = entry.name.split("/").filter { it.isNotEmpty() }
-                    
                     if (pathParts.isEmpty()) continue
                     
-                    // Extract with complete path structure
                     copyZipEntryWithPath(zipFile, entry, extractTarget, pathParts)
                     
                     restoredFiles++
@@ -395,9 +423,21 @@ class BackupManager(
             }
             
             zipFile.close()
-            
-            // Clean up temp file
             tempBackupFile.delete()
+            
+            // 5. For root profiles, copy from cache to protected path
+            if (isRootRestore && rootRestoreTempDir != null) {
+                Log.i(TAG, "Root restore: copying from cache to ${profile.savePath}")
+                val copyOk = rootAccessHelper!!.copyFromCache(rootRestoreTempDir, profile.savePath)
+                rootRestoreTempDir.deleteRecursively()
+                
+                if (!copyOk) {
+                    return@withContext RestoreResult(
+                        success = false,
+                        message = "Root: failed to copy restored files to protected path."
+                    )
+                }
+            }
             
             Log.i(TAG, "Restore completed: $restoredFiles/$totalFiles files")
             

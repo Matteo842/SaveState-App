@@ -27,6 +27,7 @@ class SettingsManager(
         private const val DEFAULT_MAX_SOURCE_SIZE_MB = 500
         private const val KEY_COMPRESSION_LEVEL = "compressionLevel"
         private const val DEFAULT_COMPRESSION_LEVEL = 6
+        private const val KEY_ROOT_MODE = "rootModeEnabled"
     }
     
     // Fallback internal file
@@ -142,6 +143,34 @@ class SettingsManager(
             writeSettingsJson(obj.toString(2))
         } catch (e: Exception) {
             Log.e(TAG, "Error saving compression level: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Gets root mode enabled state.
+     */
+    fun isRootModeEnabled(): Boolean {
+        return try {
+            val json = readSettingsJson() ?: return false
+            val obj = JSONObject(json)
+            obj.optBoolean(KEY_ROOT_MODE, false)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading root mode: ${e.message}", e)
+            false
+        }
+    }
+    
+    /**
+     * Sets root mode enabled state.
+     */
+    fun setRootModeEnabled(enabled: Boolean) {
+        try {
+            val json = readSettingsJson() ?: "{}"
+            val obj = JSONObject(json)
+            obj.put(KEY_ROOT_MODE, enabled)
+            writeSettingsJson(obj.toString(2))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving root mode: ${e.message}", e)
         }
     }
     

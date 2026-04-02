@@ -12,8 +12,8 @@ android {
         applicationId = "com.savestate.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.5"
+        versionCode = 5
+        versionName = "0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -63,6 +63,9 @@ dependencies {
     
     // Document File (SAF)
     implementation("androidx.documentfile:documentfile:1.0.1")
+    
+    // Root access (libsu)
+    implementation("com.github.topjohnwu.libsu:core:6.0.0")
     
     // Testing
     testImplementation(libs.junit)

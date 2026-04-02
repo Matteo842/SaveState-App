@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import com.savestate.app.ui.theme.*
 fun SelectEmulatorDialog(
     installedEmulators: List<EmulatorInfo>,
     isLoading: Boolean = false,
+    isRootModeEnabled: Boolean = false,
     onEmulatorSelected: (EmulatorInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -101,9 +103,13 @@ fun SelectEmulatorDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(installedEmulators) { emulator ->
+                            val isDisabled = emulator.requiresRoot && !isRootModeEnabled
                             EmulatorListItem(
                                 emulator = emulator,
-                                onClick = { onEmulatorSelected(emulator) }
+                                isDisabled = isDisabled,
+                                onClick = {
+                                    if (!isDisabled) onEmulatorSelected(emulator)
+                                }
                             )
                         }
                         
@@ -201,18 +207,22 @@ private fun EmptyEmulatorsState() {
 @Composable
 private fun EmulatorListItem(
     emulator: EmulatorInfo,
+    isDisabled: Boolean = false,
     onClick: () -> Unit
 ) {
+    val contentAlpha = if (isDisabled) 0.45f else 1f
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .clickable(enabled = !isDisabled, onClick = onClick),
         shape = RoundedCornerShape(8.dp),
-        color = DarkSurfaceVariant,
+        color = if (isDisabled) DarkSurfaceVariant.copy(alpha = 0.6f) else DarkSurfaceVariant,
         border = androidx.compose.foundation.BorderStroke(
-            1.dp, 
-            SaveStateRed.copy(alpha = 0.2f)
+            1.dp,
+            if (isDisabled) TextMuted.copy(alpha = 0.15f)
+            else SaveStateRed.copy(alpha = 0.2f)
         )
     ) {
         Row(
@@ -233,24 +243,59 @@ private fun EmulatorListItem(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = emulator.displayName,
-                    color = TextPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = emulator.displayName,
+                        color = TextPrimary.copy(alpha = contentAlpha),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (emulator.requiresRoot) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isDisabled) TextMuted.copy(alpha = 0.2f)
+                                    else SaveStateRed.copy(alpha = 0.2f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(10.dp),
+                                    tint = if (isDisabled) TextMuted
+                                           else SaveStateRed
+                                )
+                                Text(
+                                    text = "ROOT",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDisabled) TextMuted
+                                            else SaveStateRed
+                                )
+                            }
+                        }
+                    }
+                }
                 
                 Text(
-                    text = emulator.emulatorType.displayName,
-                    color = TextSecondary,
+                    text = if (isDisabled) "Enable Root Mode in Settings"
+                           else emulator.emulatorType.displayName,
+                    color = if (isDisabled) TextMuted.copy(alpha = 0.7f)
+                            else TextSecondary,
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 
-                if (emulator.defaultSavePaths.isNotEmpty()) {
+                if (!isDisabled && emulator.defaultSavePaths.isNotEmpty()) {
                     Text(
                         text = emulator.defaultSavePaths.first(),
                         color = TextMuted,
@@ -262,12 +307,14 @@ private fun EmulatorListItem(
             }
             
             // Selection indicator
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(SaveStateRed.copy(alpha = 0.6f))
-            )
+            if (!isDisabled) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(SaveStateRed.copy(alpha = 0.6f))
+                )
+            }
         }
     }
 }
