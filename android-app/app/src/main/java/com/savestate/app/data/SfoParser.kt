@@ -34,69 +34,74 @@ object SfoParser {
             RandomAccessFile(file, "r").use { raf ->
                 val data = ByteArray(file.length().toInt())
                 raf.readFully(data)
-                
-                // Validate magic number
-                if (!data.slice(0..3).toByteArray().contentEquals(SFO_MAGIC)) {
-                    Log.w(TAG, "Invalid SFO magic number in $sfoPath")
-                    return null
-                }
-                
-                // Parse header
-                val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
-                
-                // Skip magic (4 bytes) and version (4 bytes)
-                buffer.position(8)
-                
-                val keyTableStart = buffer.int
-                val dataTableStart = buffer.int
-                val numEntries = buffer.int
-                
-                // Parse index table entries
-                val indexTableOffset = 20
-                
-                for (i in 0 until numEntries) {
-                    val entryOffset = indexTableOffset + (i * 16)
-                    buffer.position(entryOffset)
-                    
-                    val keyOffset = buffer.short.toInt() and 0xFFFF
-                    buffer.short // data_fmt (skip)
-                    val dataLen = buffer.int
-                    buffer.int // data_max_len (skip)
-                    val dataOffset = buffer.int
-                    
-                    // Read key string
-                    val keyStart = keyTableStart + keyOffset
-                    var keyEnd = keyStart
-                    while (keyEnd < data.size && data[keyEnd] != 0.toByte()) {
-                        keyEnd++
-                    }
-                    val key = String(data, keyStart, keyEnd - keyStart, Charsets.UTF_8)
-                    
-                    // Check if this is the TITLE key
-                    if (key == "TITLE") {
-                        val valueStart = dataTableStart + dataOffset
-                        val valueEnd = minOf(valueStart + dataLen, data.size)
-                        val rawValue = data.slice(valueStart until valueEnd).toByteArray()
-                        
-                        // Find null terminator
-                        val nullPos = rawValue.indexOf(0.toByte())
-                        val title = if (nullPos != -1) {
-                            String(rawValue, 0, nullPos, Charsets.UTF_8)
-                        } else {
-                            String(rawValue, Charsets.UTF_8)
-                        }.trim()
-                        
-                        Log.d(TAG, "Extracted title '$title' from $sfoPath")
-                        return title
-                    }
-                }
-                
-                Log.w(TAG, "'TITLE' key not found in $sfoPath")
-                null
+                parseFromBytes(data)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing $sfoPath: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * Parse PARAM.SFO from a raw byte array to extract the game title.
+     * Useful when reading via SAF InputStream.
+     */
+    fun parseFromBytes(data: ByteArray): String? {
+        try {
+            if (data.size < 20) return null
+            if (!data.slice(0..3).toByteArray().contentEquals(SFO_MAGIC)) {
+                Log.w(TAG, "Invalid SFO magic number")
+                return null
+            }
+
+            val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.position(8)
+
+            val keyTableStart = buffer.int
+            val dataTableStart = buffer.int
+            val numEntries = buffer.int
+
+            val indexTableOffset = 20
+
+            for (i in 0 until numEntries) {
+                val entryOffset = indexTableOffset + (i * 16)
+                buffer.position(entryOffset)
+
+                val keyOffset = buffer.short.toInt() and 0xFFFF
+                buffer.short // data_fmt
+                val dataLen = buffer.int
+                buffer.int   // data_max_len
+                val dataOffset = buffer.int
+
+                val keyStart = keyTableStart + keyOffset
+                var keyEnd = keyStart
+                while (keyEnd < data.size && data[keyEnd] != 0.toByte()) {
+                    keyEnd++
+                }
+                val key = String(data, keyStart, keyEnd - keyStart, Charsets.UTF_8)
+
+                if (key == "TITLE") {
+                    val valueStart = dataTableStart + dataOffset
+                    val valueEnd = minOf(valueStart + dataLen, data.size)
+                    val rawValue = data.sliceArray(valueStart until valueEnd)
+
+                    val nullPos = rawValue.indexOf(0.toByte())
+                    val title = if (nullPos != -1) {
+                        String(rawValue, 0, nullPos, Charsets.UTF_8)
+                    } else {
+                        String(rawValue, Charsets.UTF_8)
+                    }.trim()
+
+                    Log.d(TAG, "Extracted title '$title'")
+                    return title
+                }
+            }
+
+            Log.w(TAG, "'TITLE' key not found in SFO data")
+            return null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing SFO bytes: ${e.message}", e)
+            return null
         }
     }
 }

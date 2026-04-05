@@ -1,6 +1,7 @@
 package com.savestate.app.data.model
 
 import android.graphics.drawable.Drawable
+import com.savestate.app.data.PPSSPPManager
 
 /**
  * Represents an installed emulator detected on the device
@@ -44,24 +45,6 @@ object EmulatorConfig {
         val rootSavePaths: List<String> = emptyList()
     )
     
-    // PPSSPP specific paths - checked in order of priority
-    val ppssppSavePaths = listOf(
-        // Option 1: Default/Recommended - User created PSP folder in root storage
-        "/storage/emulated/0/PSP/SAVEDATA",
-        
-        // Option 2: Base option (not recommended) - App's private external storage (Free version)
-        "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/SAVEDATA",
-        
-        // Option 3: Base option (not recommended) - App's private external storage (Gold version)
-        "/storage/emulated/0/Android/data/org.ppsspp.ppssppgold/files/PSP/SAVEDATA"
-    )
-    
-    val ppssppStatePaths = listOf(
-        "/storage/emulated/0/PSP/PPSSPP_STATE",
-        "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/PPSSPP_STATE",
-        "/storage/emulated/0/Android/data/org.ppsspp.ppssppgold/files/PSP/PPSSPP_STATE"
-    )
-    
     val knownEmulators = listOf(
         // PPSSPP - PSP Emulator (Primary focus)
         EmulatorDefinition(
@@ -71,7 +54,7 @@ object EmulatorConfig {
                 "org.ppsspp.ppssppgold"     // Gold version
             ),
             displayName = "PPSSPP",
-            defaultSavePaths = ppssppSavePaths + ppssppStatePaths
+            defaultSavePaths = PPSSPPManager.savePaths + PPSSPPManager.statePaths
         ),
         
         // RetroArch - Multi-system emulator

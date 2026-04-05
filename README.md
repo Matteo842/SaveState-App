@@ -34,7 +34,6 @@ The app is **functional** and can be used to:
 - **Dolphin** (GameCube / Wii): backup and restore including **MMJR / MMJR2** variants; public paths under `dolphin-emu/` and, with **Root mode**, access to app-private storage.
 - **DuckStation** (PS1): memcards and save states; **Root mode** for private app data when needed.
 - **Root mode** (Settings): toggle to use root (via [libsu](https://github.com/topjohnwu/libsu)) for emulators that keep saves in inaccessible `Android/data/` locations. Requires a rooted device and granting superuser access.
-- **Broader emulator coverage** in detection and default paths: Citra, Azahar, DraStic, Flycast, mGBA, Lemuroid, Pizza Boy, AetherSX2, Vita3K, Yuzu, Citron (see table below).
 - **Settings**: max backups per profile, maximum source size (MB) for a single backup, and ZIP compression level.
 
 ## 🎮 Supported Emulators
@@ -47,15 +46,6 @@ Paths are preconfigured per emulator. Some titles only expose saves in **private
 | **RetroArch** | Multi-system | ✅ Saves + runahead states |
 | **Dolphin** | GameCube / Wii | ✅ Public + optional **root** for `Android/data/` |
 | **DuckStation** | PS1 | ✅ Public + optional **root** for `Android/data/` |
-| **Citra** / **Azahar** | 3DS | ✅ Default paths |
-| **DraStic** | DS | ✅ |
-| **Flycast** | Dreamcast | ✅ |
-| **mGBA** | GBA | ✅ |
-| **Lemuroid** | Multi-system | ✅ |
-| **Pizza Boy** | GBA / GBC | ✅ |
-| **AetherSX2** | PS2 | ✅ |
-| **Vita3K** | PS Vita | ✅ |
-| **Yuzu** / **Citron** | Switch | ✅ |
 
 > Compatibility depends on where each emulator stores files on your device. If a game does not appear in the list, check the emulator’s save directory settings or use Root mode if saves are under `Android/data/`.
 
@@ -85,7 +75,8 @@ Your profiles and backups are saved to the folder you select. This means:
 
 ## 🗺️ Roadmap
 
-- [x] Support for more emulators (paths + detection; Dolphin / DuckStation with root where needed)
+- [x] PPSSPP, RetroArch, Dolphin, and DuckStation (paths + detection; Dolphin / DuckStation with root where needed)
+- [ ] Additional emulators (dedicated scanning and backup flows)
 - [ ] Auto-backup scheduling
 - [ ] Cloud backup integration (Google Drive, OneDrive)
 - [ ] Import/Export profiles

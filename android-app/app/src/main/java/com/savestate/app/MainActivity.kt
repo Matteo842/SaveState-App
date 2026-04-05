@@ -29,14 +29,13 @@ import com.savestate.app.data.BackupInfo
 import com.savestate.app.data.BackupManager
 import com.savestate.app.data.ConfigManager
 import com.savestate.app.data.EmulatorDetector
-import com.savestate.app.data.GameScanner
 import com.savestate.app.data.DolphinManager
 import com.savestate.app.data.DuckStationManager
+import com.savestate.app.data.PPSSPPManager
 import com.savestate.app.data.RetroArchManager
 import com.savestate.app.data.RootAccessHelper
 import com.savestate.app.data.ProfileRepository
 import com.savestate.app.data.SettingsManager
-import com.savestate.app.data.SfoParser
 import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorInfo
@@ -61,7 +60,7 @@ private val APP_VERSION = BuildConfig.VERSION_NAME
 class MainActivity : ComponentActivity() {
     
     private lateinit var emulatorDetector: EmulatorDetector
-    private lateinit var gameScanner: GameScanner
+    private lateinit var ppssppManager: PPSSPPManager
     private lateinit var retroArchManager: RetroArchManager
     private lateinit var dolphinManager: DolphinManager
     private lateinit var duckStationManager: DuckStationManager
@@ -151,7 +150,7 @@ class MainActivity : ComponentActivity() {
         
         // Initialize detectors and managers
         emulatorDetector = EmulatorDetector(applicationContext)
-        gameScanner = GameScanner()
+        ppssppManager = PPSSPPManager()
         retroArchManager = RetroArchManager()
         dolphinManager = DolphinManager()
         duckStationManager = DuckStationManager()
@@ -162,7 +161,7 @@ class MainActivity : ComponentActivity() {
         profileRepository = ProfileRepository(applicationContext, configManager)
         
         // Initialize PSP game database from assets
-        GameScanner.initDatabase(applicationContext)
+        PPSSPPManager.initDatabase(applicationContext)
         
         // Request storage permission at startup (like WiFi FTP Server)
         if (!hasStoragePermission()) {
@@ -784,10 +783,13 @@ class MainActivity : ComponentActivity() {
                 
                 val emulatorType = currentEmulator?.emulatorType
                 val games = when (emulatorType) {
-                    Emulator.RETROARCH -> scanRetroArchSafFolder(documentFile)
-                    Emulator.DOLPHIN -> scanDolphinSafFolder(documentFile)
-                    Emulator.DUCKSTATION -> scanDuckStationSafFolder(documentFile)
-                    else -> scanPPSSPPSafFolder(documentFile)
+                    Emulator.RETROARCH -> retroArchManager.scanSafFolder(documentFile)
+                    Emulator.DOLPHIN -> dolphinManager.scanSafFolder(documentFile)
+                    Emulator.DUCKSTATION -> duckStationManager.scanSafFolder(documentFile)
+                    else -> ppssppManager.scanSafFolder(
+                        documentFile, contentResolver,
+                        emulatorType ?: Emulator.PPSSPP
+                    )
                 }
                 
                 Log.d("SaveState", "SAF scan complete. Found ${games.size} unique games")
@@ -807,97 +809,6 @@ class MainActivity : ComponentActivity() {
     }
     
     /**
-     * Scan a SAF folder for PPSSPP saves (folder-based: each game has its own subfolder)
-     */
-    private fun scanPPSSPPSafFolder(documentFile: DocumentFile): List<DetectedGame> {
-        val children = documentFile.listFiles()
-        Log.d("SaveState", "Found ${children.size} items in SAVEDATA folder")
-        
-        val gamesMap = mutableMapOf<String, DetectedGame>()
-        
-        for (child in children) {
-            if (!child.isDirectory) continue
-            
-            val folderName = child.name ?: continue
-            
-            var baseGameId: String? = null
-            
-            if (folderName.endsWith("DATA00")) {
-                baseGameId = folderName.dropLast(6)
-            } else if (folderName.endsWith("PROFILE00")) {
-                baseGameId = folderName.dropLast(9)
-            } else if (folderName.matches(Regex("^[A-Z]{4}\\d{5}.*$"))) {
-                baseGameId = folderName.take(9)
-            }
-            
-            if (baseGameId == null) continue
-            
-            Log.d("SaveState", "  Found game ID: $baseGameId")
-            
-            if (gamesMap.containsKey(baseGameId)) {
-                Log.d("SaveState", "  Already have this game, skipping duplicate")
-                continue
-            }
-            
-            var gameName: String? = null
-            val sfoFile = child.findFile("PARAM.SFO")
-            if (sfoFile != null && sfoFile.isFile) {
-                try {
-                    contentResolver.openInputStream(sfoFile.uri)?.use { inputStream ->
-                        val data = inputStream.readBytes()
-                        gameName = parseSfoFromBytes(data)
-                    }
-                } catch (e: Exception) {
-                    Log.w("SaveState", "Error parsing SFO for $folderName: ${e.message}")
-                }
-            }
-            
-            if (gameName == null) {
-                gameName = GameScanner.getGameNameFromDatabase(baseGameId) ?: baseGameId
-            }
-            
-            val saveCount = try {
-                child.listFiles().count { it.isFile }
-            } catch (e: Exception) {
-                0
-            }
-            
-            gamesMap[baseGameId] = DetectedGame(
-                gameId = baseGameId,
-                gameName = gameName ?: baseGameId,
-                savePath = child.uri.toString(),
-                parentPath = documentFile.uri.toString(),
-                emulatorType = currentEmulator?.emulatorType ?: Emulator.PPSSPP,
-                saveCount = saveCount,
-                lastModified = child.lastModified()
-            )
-        }
-        
-        return gamesMap.values.toList()
-    }
-    
-    /**
-     * Scan a SAF folder for RetroArch saves — delegates to RetroArchManager.
-     */
-    private fun scanRetroArchSafFolder(documentFile: DocumentFile): List<DetectedGame> {
-        return retroArchManager.scanSafFolder(documentFile)
-    }
-    
-    /**
-     * Scan a SAF folder for Dolphin saves — delegates to DolphinManager.
-     */
-    private fun scanDolphinSafFolder(documentFile: DocumentFile): List<DetectedGame> {
-        return dolphinManager.scanSafFolder(documentFile)
-    }
-    
-    /**
-     * Scan a SAF folder for DuckStation saves — delegates to DuckStationManager.
-     */
-    private fun scanDuckStationSafFolder(documentFile: DocumentFile): List<DetectedGame> {
-        return duckStationManager.scanSafFolder(documentFile)
-    }
-    
-    /**
      * Scan root-protected save paths for a given emulator via su.
      * Called when root mode is enabled and a root-only emulator is selected.
      */
@@ -909,73 +820,6 @@ class MainActivity : ComponentActivity() {
             Emulator.DOLPHIN -> dolphinManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.DUCKSTATION -> duckStationManager.scanRootPaths(rootAccessHelper, rootPaths)
             else -> emptyList()
-        }
-    }
-    
-    /**
-     * Parse PARAM.SFO from bytes to extract title
-     */
-    private fun parseSfoFromBytes(data: ByteArray): String? {
-        try {
-            // Validate magic: \x00PSF
-            if (data.size < 20) return null
-            if (data[0] != 0x00.toByte() || data[1] != 0x50.toByte() || 
-                data[2] != 0x53.toByte() || data[3] != 0x46.toByte()) {
-                return null
-            }
-            
-            // Parse header (little endian)
-            fun readInt(offset: Int): Int {
-                return (data[offset].toInt() and 0xFF) or
-                       ((data[offset + 1].toInt() and 0xFF) shl 8) or
-                       ((data[offset + 2].toInt() and 0xFF) shl 16) or
-                       ((data[offset + 3].toInt() and 0xFF) shl 24)
-            }
-            
-            fun readShort(offset: Int): Int {
-                return (data[offset].toInt() and 0xFF) or
-                       ((data[offset + 1].toInt() and 0xFF) shl 8)
-            }
-            
-            val keyTableStart = readInt(8)
-            val dataTableStart = readInt(12)
-            val numEntries = readInt(16)
-            
-            // Parse index table
-            for (i in 0 until numEntries) {
-                val entryOffset = 20 + (i * 16)
-                if (entryOffset + 16 > data.size) break
-                
-                val keyOffset = readShort(entryOffset)
-                val dataLen = readInt(entryOffset + 4)
-                val dataOffset = readInt(entryOffset + 12)
-                
-                // Read key
-                val keyStart = keyTableStart + keyOffset
-                var keyEnd = keyStart
-                while (keyEnd < data.size && data[keyEnd] != 0.toByte()) {
-                    keyEnd++
-                }
-                val key = String(data, keyStart, keyEnd - keyStart, Charsets.UTF_8)
-                
-                if (key == "TITLE") {
-                    val valueStart = dataTableStart + dataOffset
-                    val valueEnd = minOf(valueStart + dataLen, data.size)
-                    val rawValue = data.sliceArray(valueStart until valueEnd)
-                    
-                    val nullPos = rawValue.indexOf(0.toByte())
-                    return if (nullPos != -1) {
-                        String(rawValue, 0, nullPos, Charsets.UTF_8).trim()
-                    } else {
-                        String(rawValue, Charsets.UTF_8).trim()
-                    }
-                }
-            }
-            
-            return null
-        } catch (e: Exception) {
-            Log.e("SaveState", "Error parsing SFO bytes: ${e.message}")
-            return null
         }
     }
     
