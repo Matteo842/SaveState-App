@@ -31,6 +31,7 @@ import com.savestate.app.data.ConfigManager
 import com.savestate.app.data.EmulatorDetector
 import com.savestate.app.data.DolphinManager
 import com.savestate.app.data.DuckStationManager
+import com.savestate.app.data.M64PlusFZManager
 import com.savestate.app.data.PPSSPPManager
 import com.savestate.app.data.RetroArchManager
 import com.savestate.app.data.RootAccessHelper
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var retroArchManager: RetroArchManager
     private lateinit var dolphinManager: DolphinManager
     private lateinit var duckStationManager: DuckStationManager
+    private lateinit var m64PlusFZManager: M64PlusFZManager
     private lateinit var rootAccessHelper: RootAccessHelper
     private lateinit var configManager: ConfigManager
     private lateinit var settingsManager: SettingsManager
@@ -154,6 +156,7 @@ class MainActivity : ComponentActivity() {
         retroArchManager = RetroArchManager()
         dolphinManager = DolphinManager()
         duckStationManager = DuckStationManager()
+        m64PlusFZManager = M64PlusFZManager()
         rootAccessHelper = RootAccessHelper()
         configManager = ConfigManager(applicationContext)
         settingsManager = SettingsManager(applicationContext, configManager)
@@ -786,6 +789,7 @@ class MainActivity : ComponentActivity() {
                     Emulator.RETROARCH -> retroArchManager.scanSafFolder(documentFile)
                     Emulator.DOLPHIN -> dolphinManager.scanSafFolder(documentFile)
                     Emulator.DUCKSTATION -> duckStationManager.scanSafFolder(documentFile)
+                    Emulator.M64PLUS_FZ -> m64PlusFZManager.scanSafFolder(documentFile)
                     else -> ppssppManager.scanSafFolder(
                         documentFile, contentResolver,
                         emulatorType ?: Emulator.PPSSPP
@@ -819,6 +823,7 @@ class MainActivity : ComponentActivity() {
         return when (emulator.emulatorType) {
             Emulator.DOLPHIN -> dolphinManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.DUCKSTATION -> duckStationManager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.M64PLUS_FZ -> m64PlusFZManager.scanRootPaths(rootAccessHelper, rootPaths)
             else -> emptyList()
         }
     }

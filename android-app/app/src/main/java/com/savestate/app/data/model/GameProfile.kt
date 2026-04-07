@@ -33,6 +33,7 @@ enum class Emulator(val displayName: String) {
     FLYCAST("Flycast"),
     MGBA("mGBA"),
     LEMUROID("Lemuroid"),
+    M64PLUS_FZ("M64Plus FZ"),
     PIZZA_BOY("Pizza Boy"),
     AETHERSX2("AetherSX2"),
     VITA3K("Vita3K"),

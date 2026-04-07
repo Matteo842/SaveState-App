@@ -111,6 +111,24 @@ object EmulatorConfig {
             )
         ),
         
+        // M64Plus FZ - Nintendo 64 emulator
+        EmulatorDefinition(
+            emulatorType = Emulator.M64PLUS_FZ,
+            packageNames = listOf(
+                "org.mupen64plusae.v3.fzurita",      // Free version
+                "org.mupen64plusae.v3.fzurita.pro"   // Pro version
+            ),
+            displayName = "M64Plus FZ",
+            defaultSavePaths = listOf(
+                "/storage/emulated/0/M64Plus FZ"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/org.mupen64plusae.v3.fzurita/files",
+                "/storage/emulated/0/Android/data/org.mupen64plusae.v3.fzurita.pro/files"
+            )
+        ),
+        
         // Citra - Nintendo 3DS emulator
         EmulatorDefinition(
             emulatorType = Emulator.CITRA,

@@ -224,6 +224,7 @@ private fun SelectFolderPrompt(
         "RetroArch" -> "RetroArch/saves  or  RetroArch/states"
         "Dolphin" -> "dolphin-emu"
         "DuckStation" -> "duckstation/memcards"
+        "M64Plus FZ" -> "M64Plus FZ  (external data folder)"
         "Citra" -> "citra-emu/sdmc"
         "Azahar" -> "azahar-emu/sdmc"
         "DraStic" -> "DraStic/backup"
