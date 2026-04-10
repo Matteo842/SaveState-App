@@ -29,9 +29,12 @@ import com.savestate.app.data.BackupInfo
 import com.savestate.app.data.BackupManager
 import com.savestate.app.data.ConfigManager
 import com.savestate.app.data.EmulatorDetector
+import com.savestate.app.data.AzaharManager
 import com.savestate.app.data.DolphinManager
+import com.savestate.app.data.DraSticManager
 import com.savestate.app.data.DuckStationManager
 import com.savestate.app.data.M64PlusFZManager
+import com.savestate.app.data.NetherSX2Manager
 import com.savestate.app.data.PPSSPPManager
 import com.savestate.app.data.RetroArchManager
 import com.savestate.app.data.RootAccessHelper
@@ -63,9 +66,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var emulatorDetector: EmulatorDetector
     private lateinit var ppssppManager: PPSSPPManager
     private lateinit var retroArchManager: RetroArchManager
+    private lateinit var azaharManager: AzaharManager
     private lateinit var dolphinManager: DolphinManager
+    private lateinit var draSticManager: DraSticManager
     private lateinit var duckStationManager: DuckStationManager
     private lateinit var m64PlusFZManager: M64PlusFZManager
+    private lateinit var netherSX2Manager: NetherSX2Manager
     private lateinit var rootAccessHelper: RootAccessHelper
     private lateinit var configManager: ConfigManager
     private lateinit var settingsManager: SettingsManager
@@ -154,9 +160,12 @@ class MainActivity : ComponentActivity() {
         emulatorDetector = EmulatorDetector(applicationContext)
         ppssppManager = PPSSPPManager()
         retroArchManager = RetroArchManager()
+        azaharManager = AzaharManager()
         dolphinManager = DolphinManager()
+        draSticManager = DraSticManager()
         duckStationManager = DuckStationManager()
         m64PlusFZManager = M64PlusFZManager()
+        netherSX2Manager = NetherSX2Manager()
         rootAccessHelper = RootAccessHelper()
         configManager = ConfigManager(applicationContext)
         settingsManager = SettingsManager(applicationContext, configManager)
@@ -788,8 +797,11 @@ class MainActivity : ComponentActivity() {
                 val games = when (emulatorType) {
                     Emulator.RETROARCH -> retroArchManager.scanSafFolder(documentFile)
                     Emulator.DOLPHIN -> dolphinManager.scanSafFolder(documentFile)
+                    Emulator.AZAHAR -> azaharManager.scanSafFolder(documentFile)
+                    Emulator.DRASTIC -> draSticManager.scanSafFolder(documentFile)
                     Emulator.DUCKSTATION -> duckStationManager.scanSafFolder(documentFile)
                     Emulator.M64PLUS_FZ -> m64PlusFZManager.scanSafFolder(documentFile)
+                    Emulator.NETHERSX2 -> netherSX2Manager.scanSafFolder(documentFile)
                     else -> ppssppManager.scanSafFolder(
                         documentFile, contentResolver,
                         emulatorType ?: Emulator.PPSSPP
@@ -822,8 +834,11 @@ class MainActivity : ComponentActivity() {
         
         return when (emulator.emulatorType) {
             Emulator.DOLPHIN -> dolphinManager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.AZAHAR -> azaharManager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.DRASTIC -> draSticManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.DUCKSTATION -> duckStationManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.M64PLUS_FZ -> m64PlusFZManager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.NETHERSX2 -> netherSX2Manager.scanRootPaths(rootAccessHelper, rootPaths)
             else -> emptyList()
         }
     }

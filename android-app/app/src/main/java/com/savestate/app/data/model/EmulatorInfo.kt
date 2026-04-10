@@ -234,6 +234,23 @@ object EmulatorConfig {
             )
         ),
         
+        // NetherSX2 - PlayStation 2 emulator (AetherSX2 fork)
+        EmulatorDefinition(
+            emulatorType = Emulator.NETHERSX2,
+            packageNames = listOf(
+                "xyz.aethersx2.android"
+            ),
+            displayName = "NetherSX2",
+            defaultSavePaths = listOf(
+                "/storage/emulated/0/NetherSX2/memcards",
+                "/storage/emulated/0/NetherSX2/sstates"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/xyz.aethersx2.android/files"
+            )
+        ),
+        
         // Vita3K - PlayStation Vita emulator
         EmulatorDefinition(
             emulatorType = Emulator.VITA3K,

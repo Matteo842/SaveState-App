@@ -36,6 +36,7 @@ enum class Emulator(val displayName: String) {
     M64PLUS_FZ("M64Plus FZ"),
     PIZZA_BOY("Pizza Boy"),
     AETHERSX2("AetherSX2"),
+    NETHERSX2("NetherSX2"),
     VITA3K("Vita3K"),
     SKYLINE("Skyline"),
     YUZU("Yuzu"),
