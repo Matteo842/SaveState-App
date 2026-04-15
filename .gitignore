@@ -14,3 +14,4 @@
 /tools
 /.idea
 AS-key
+android-app/gradle/gradle-daemon-jvm.properties
