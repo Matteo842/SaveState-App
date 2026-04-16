@@ -236,6 +236,7 @@ private fun SelectFolderPrompt(
         "Vita3K" -> "Vita3K/ux0/user"
         "Yuzu" -> "yuzu/nand/user/save"
         "Citron" -> "citron/nand/user/save"
+        "Eden" -> "Eden/nand/user/save"
         else -> "emulator/saves"
     }
     

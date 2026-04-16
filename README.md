@@ -18,7 +18,7 @@
 
 **SaveState App** is an Android application designed to backup and restore save files from **emulators**. Unlike the desktop version which targets PC games in general, this mobile app is specifically built for the Android emulator ecosystem.
 
-### Current Status: `Pre-Release Alpha (v0.6)`
+### Current Status: `Pre-Release Alpha (v0.7)`
 
 The app is **functional** and can be used to:
 - ✅ Detect installed emulators
@@ -29,7 +29,11 @@ The app is **functional** and can be used to:
 - ✅ Persist data across app reinstalls (when using external storage)
 - ✅ Optional **root mode** for saves under protected `Android/data/` paths
 
-### What’s new in v0.6
+### What’s new in v0.7
+
+- **Eden** (Nintendo Switch): detection and backup/restore for Yuzu-style save layout; optional **Root mode** for `Android/data/` paths; game titles resolved via bundled Switch title-ID database.
+
+### Earlier: v0.6
 
 - **Dolphin** (GameCube / Wii): backup and restore including **MMJR / MMJR2** variants; public paths under `dolphin-emu/` and, with **Root mode**, access to app-private storage.
 - **DuckStation** (PS1): memcards and save states; **Root mode** for private app data when needed.

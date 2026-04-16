@@ -284,6 +284,27 @@ object EmulatorConfig {
             defaultSavePaths = listOf(
                 "/storage/emulated/0/citron/nand/user/save"
             )
+        ),
+
+        // Eden - Nintendo Switch emulator (Yuzu fork)
+        EmulatorDefinition(
+            emulatorType = Emulator.EDEN,
+            packageNames = listOf(
+                "dev.eden.eden_emulator",
+                "dev.eden.eden_nightly",
+                "dev.legacy.eden_emulator"
+            ),
+            displayName = "Eden",
+            defaultSavePaths = listOf(
+                "/storage/emulated/0/Eden/nand/user/save",
+                "/storage/emulated/0/eden/nand/user/save"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/dev.eden.eden_emulator/files",
+                "/storage/emulated/0/Android/data/dev.eden.eden_nightly/files",
+                "/storage/emulated/0/Android/data/dev.legacy.eden_emulator/files"
+            )
         )
     )
     

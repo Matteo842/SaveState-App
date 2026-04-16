@@ -41,5 +41,6 @@ enum class Emulator(val displayName: String) {
     SKYLINE("Skyline"),
     YUZU("Yuzu"),
     CITRON("Citron"),
+    EDEN("Eden"),
     OTHER("Other")
 }

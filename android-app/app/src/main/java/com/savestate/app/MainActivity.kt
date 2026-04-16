@@ -33,6 +33,7 @@ import com.savestate.app.data.AzaharManager
 import com.savestate.app.data.DolphinManager
 import com.savestate.app.data.DraSticManager
 import com.savestate.app.data.DuckStationManager
+import com.savestate.app.data.EdenManager
 import com.savestate.app.data.M64PlusFZManager
 import com.savestate.app.data.NetherSX2Manager
 import com.savestate.app.data.PPSSPPManager
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var dolphinManager: DolphinManager
     private lateinit var draSticManager: DraSticManager
     private lateinit var duckStationManager: DuckStationManager
+    private lateinit var edenManager: EdenManager
     private lateinit var m64PlusFZManager: M64PlusFZManager
     private lateinit var netherSX2Manager: NetherSX2Manager
     private lateinit var rootAccessHelper: RootAccessHelper
@@ -164,6 +166,7 @@ class MainActivity : ComponentActivity() {
         dolphinManager = DolphinManager()
         draSticManager = DraSticManager()
         duckStationManager = DuckStationManager()
+        edenManager = EdenManager()
         m64PlusFZManager = M64PlusFZManager()
         netherSX2Manager = NetherSX2Manager()
         rootAccessHelper = RootAccessHelper()
@@ -174,6 +177,9 @@ class MainActivity : ComponentActivity() {
         
         // Initialize PSP game database from assets
         PPSSPPManager.initDatabase(applicationContext)
+
+        // Initialize Switch game database from assets (Eden)
+        EdenManager.initDatabase(applicationContext)
         
         // Request storage permission at startup (like WiFi FTP Server)
         if (!hasStoragePermission()) {
@@ -802,6 +808,7 @@ class MainActivity : ComponentActivity() {
                     Emulator.DUCKSTATION -> duckStationManager.scanSafFolder(documentFile)
                     Emulator.M64PLUS_FZ -> m64PlusFZManager.scanSafFolder(documentFile)
                     Emulator.NETHERSX2 -> netherSX2Manager.scanSafFolder(documentFile)
+                    Emulator.EDEN -> edenManager.scanSafFolder(documentFile)
                     else -> ppssppManager.scanSafFolder(
                         documentFile, contentResolver,
                         emulatorType ?: Emulator.PPSSPP
@@ -839,6 +846,7 @@ class MainActivity : ComponentActivity() {
             Emulator.DUCKSTATION -> duckStationManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.M64PLUS_FZ -> m64PlusFZManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.NETHERSX2 -> netherSX2Manager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.EDEN -> edenManager.scanRootPaths(rootAccessHelper, rootPaths)
             else -> emptyList()
         }
     }
