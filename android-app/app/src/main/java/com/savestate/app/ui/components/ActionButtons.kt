@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.savestate.app.ui.theme.*
+import com.savestate.app.ui.tutorial.tutorialTarget
 
 /**
  * Section header matching SaveState desktop style
@@ -133,7 +134,7 @@ fun ActionsSection(
                     accentColor = ButtonGreen,
                     compact = compact,
                     dense = dense,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().tutorialTarget("backup_btn")
                 )
                 SaveStateButton(
                     text = "Restore",
@@ -144,7 +145,7 @@ fun ActionsSection(
                     accentColor = ButtonBlue,
                     compact = compact,
                     dense = dense,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().tutorialTarget("restore_btn")
                 )
                 SaveStateButton(
                     text = "Manage",
@@ -153,7 +154,7 @@ fun ActionsSection(
                     enabled = hasProfileSelected,
                     compact = compact,
                     dense = dense,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().tutorialTarget("manage_btn")
                 )
             }
         } else {
@@ -170,7 +171,7 @@ fun ActionsSection(
                     enabled = hasProfileSelected,
                     isPrimary = true,
                     accentColor = ButtonGreen,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).tutorialTarget("backup_btn")
                 )
                 SaveStateButton(
                     text = "Restore",
@@ -179,14 +180,14 @@ fun ActionsSection(
                     enabled = hasProfileSelected,
                     isPrimary = true,
                     accentColor = ButtonBlue,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).tutorialTarget("restore_btn")
                 )
                 SaveStateButton(
                     text = "Manage",
                     icon = Icons.Filled.Folder,
                     onClick = onManageBackupsClick,
                     enabled = hasProfileSelected,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).tutorialTarget("manage_btn")
                 )
             }
         }
@@ -226,7 +227,7 @@ fun GeneralSection(
                     accentColor = SaveStateRed,
                     compact = compact,
                     dense = dense,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().tutorialTarget("new_profile_btn")
                 )
                 SaveStateButton(
                     text = "Settings",
@@ -250,7 +251,7 @@ fun GeneralSection(
                     onClick = onNewProfileClick,
                     isPrimary = true,
                     accentColor = SaveStateRed,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).tutorialTarget("new_profile_btn")
                 )
                 SaveStateButton(
                     text = "Settings",

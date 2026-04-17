@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.savestate.app.data.BackupDirectoryInfo
 import com.savestate.app.ui.theme.*
+import com.savestate.app.ui.tutorial.tutorialTarget
 
 /**
  * Settings screen for SaveState Android app.
@@ -183,6 +184,7 @@ fun SettingsScreen(
                     Button(
                         onClick = onBrowseBackupPath,
                         enabled = !isMigrating,
+                        modifier = Modifier.tutorialTarget("browse_btn"),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DarkSurface,
                             contentColor = TextPrimary,
@@ -231,7 +233,9 @@ fun SettingsScreen(
             // Root Mode section
             SettingsSection(title = "Root Mode") {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .tutorialTarget("root_switch"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -406,6 +410,7 @@ fun SettingsScreen(
                 )
                 
                 Column(
+                    modifier = Modifier.tutorialTarget("compression_group"),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     options.forEach { (level, label, hint) ->
@@ -493,7 +498,10 @@ private fun SettingsTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Back button
-            IconButton(onClick = onBackClick) {
+            IconButton(
+                onClick = onBackClick,
+                modifier = Modifier.tutorialTarget("settings_back")
+            ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",

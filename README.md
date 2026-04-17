@@ -18,7 +18,7 @@
 
 **SaveState App** is an Android application designed to backup and restore save files from **emulators**. Unlike the desktop version which targets PC games in general, this mobile app is specifically built for the Android emulator ecosystem.
 
-### Current Status: `Pre-Release Alpha (v0.7)`
+### Current Status: `Pre-Release Alpha (v0.8)`
 
 The app is **functional** and can be used to:
 - ✅ Detect installed emulators
@@ -29,7 +29,11 @@ The app is **functional** and can be used to:
 - ✅ Persist data across app reinstalls (when using external storage)
 - ✅ Optional **root mode** for saves under protected `Android/data/` paths
 
-### What’s new in v0.7
+### What’s new in v0.8
+
+- **First-launch tutorial**: interactive coach-marks (spotlight + tooltips) that walk through storage permission, backup folder in Settings, profile creation, Backup / Restore / Manage, and favorites—shown once per install.
+
+### Earlier: v0.7
 
 - **Eden** (Nintendo Switch): detection and backup/restore for Yuzu-style save layout; optional **Root mode** for `Android/data/` paths; game titles resolved via bundled Switch title-ID database.
 
@@ -42,14 +46,28 @@ The app is **functional** and can be used to:
 
 ## 🎮 Supported Emulators
 
-Paths are preconfigured per emulator. Some titles only expose saves in **private app storage** on modern Android; for those, enable **Root mode** where indicated.
+Paths are preconfigured per emulator in the app (detection + default save locations). Some titles only expose saves in **private app storage** on modern Android; for those, enable **Root mode** where indicated.
 
 | Emulator | Platform | Notes |
 |----------|----------|--------|
-| **PPSSPP** | PSP | ✅ SAVEDATA + save states |
-| **RetroArch** | Multi-system | ✅ Saves + runahead states |
-| **Dolphin** | GameCube / Wii | ✅ Public + optional **root** for `Android/data/` |
-| **DuckStation** | PS1 | ✅ Public + optional **root** for `Android/data/` |
+| **AetherSX2** | PS2 | Memory cards + save states |
+| **Azahar** | 3DS | Citra-style `sdmc` layout; folder scan |
+| **Citra** | 3DS | SDMC / NAND paths |
+| **Citron** | Switch | User saves under `nand/user/save` |
+| **Dolphin** | GameCube / Wii | Public `dolphin-emu/`; MMJR / MMJR2; optional **root** for `Android/data/` |
+| **DraStic** | DS | Backup folder + save states |
+| **DuckStation** | PS1 | Memcards + save states; optional **root** for app data |
+| **Eden** | Switch | Yuzu-style layout; bundled title-ID DB; optional **root** |
+| **Flycast** | Dreamcast | `flycast/data` |
+| **Lemuroid** | Multi-system | Saves + states |
+| **mGBA** | GBA | Battery saves |
+| **M64Plus FZ** | N64 | Default public path; optional **root** for app-private storage |
+| **NetherSX2** | PS2 | AetherSX2 fork; memcards + states; optional **root** |
+| **Pizza Boy** | GBA / GBC | Saves folder |
+| **PPSSPP** | PSP | SAVEDATA + save states |
+| **RetroArch** | Multi-system | Per-core saves + states |
+| **Vita3K** | PS Vita | `ux0/user` layout |
+| **Yuzu** | Switch | `yuzu/nand/user/save` |
 
 > Compatibility depends on where each emulator stores files on your device. If a game does not appear in the list, check the emulator’s save directory settings or use Root mode if saves are under `Android/data/`.
 
@@ -79,7 +97,7 @@ Your profiles and backups are saved to the folder you select. This means:
 
 ## 🗺️ Roadmap
 
-- [x] PPSSPP, RetroArch, Dolphin, and DuckStation (paths + detection; Dolphin / DuckStation with root where needed)
+- [x] Broad emulator coverage — see **Supported Emulators** (detection + default paths; root-capable emulators noted in the table)
 - [ ] Additional emulators (dedicated scanning and backup flows)
 - [ ] Auto-backup scheduling
 - [ ] Cloud backup integration (Google Drive, OneDrive)

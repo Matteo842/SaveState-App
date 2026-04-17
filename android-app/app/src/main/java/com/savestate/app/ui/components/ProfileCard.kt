@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.savestate.app.R
 import com.savestate.app.data.model.GameProfile
 import com.savestate.app.ui.theme.*
+import com.savestate.app.ui.tutorial.tutorialTarget
 
 /**
  * Profile card component matching SaveState desktop app style
@@ -42,7 +43,8 @@ fun ProfileCard(
     onProfileClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isFirst: Boolean = false
 ) {
     val backgroundColor = when {
         isSelected -> DarkTableRowSelected
@@ -55,6 +57,7 @@ fun ProfileCard(
             .fillMaxWidth()
             .height(56.dp)
             .background(backgroundColor)
+            .then(if (isFirst) Modifier.tutorialTarget("first_profile_row") else Modifier)
             .clickable { onProfileClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -69,7 +72,9 @@ fun ProfileCard(
         // Favorite star
         IconButton(
             onClick = onFavoriteClick,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier
+                .size(40.dp)
+                .then(if (isFirst) Modifier.tutorialTarget("favorite_btn") else Modifier)
         ) {
             Icon(
                 imageVector = if (profile.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,

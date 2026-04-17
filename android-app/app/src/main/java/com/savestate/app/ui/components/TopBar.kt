@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.savestate.app.ui.theme.*
+import com.savestate.app.ui.tutorial.tutorialTarget
 
 /**
  * Top app bar matching SaveState desktop title bar style
@@ -57,7 +58,10 @@ fun SaveStateTopBar(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Settings gear icon
-                IconButton(onClick = onSettingsClick) {
+                IconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier.tutorialTarget("settings_btn")
+                ) {
                     Icon(
                         imageVector = Icons.Filled.Settings,
                         contentDescription = "Settings",

@@ -41,6 +41,7 @@ import com.savestate.app.data.RetroArchManager
 import com.savestate.app.data.RootAccessHelper
 import com.savestate.app.data.ProfileRepository
 import com.savestate.app.data.SettingsManager
+import com.savestate.app.data.TutorialPreferences
 import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorInfo
@@ -52,6 +53,10 @@ import com.savestate.app.ui.dialogs.SelectGameDialog
 import com.savestate.app.ui.screens.MainScreen
 import com.savestate.app.ui.screens.SettingsScreen
 import com.savestate.app.ui.theme.*
+import com.savestate.app.ui.tutorial.TutorialCallbacks
+import com.savestate.app.ui.tutorial.TutorialOverlay
+import com.savestate.app.ui.tutorial.TutorialScreen
+import com.savestate.app.ui.tutorial.TutorialState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -79,6 +84,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var settingsManager: SettingsManager
     private lateinit var backupManager: BackupManager
     private lateinit var profileRepository: ProfileRepository
+    private lateinit var tutorialPrefs: TutorialPreferences
     
     // Callback to run after storage permission is granted
     private var onStoragePermissionGranted: (() -> Unit)? = null
@@ -174,6 +180,7 @@ class MainActivity : ComponentActivity() {
         settingsManager = SettingsManager(applicationContext, configManager)
         backupManager = BackupManager(applicationContext, settingsManager, rootAccessHelper)
         profileRepository = ProfileRepository(applicationContext, configManager)
+        tutorialPrefs = TutorialPreferences(applicationContext)
         
         // Initialize PSP game database from assets
         PPSSPPManager.initDatabase(applicationContext)
@@ -243,10 +250,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                // Check if backup folder is configured on startup
+                // Start the first-launch tutorial before any other nav side-effect
+                // so it can drive the user into Settings itself.
                 LaunchedEffect(Unit) {
-                    if (!configManager.isConfigured()) {
-                        // Show message and open settings
+                    if (!tutorialPrefs.hasCompletedTutorial() && !TutorialState.isActive) {
+                        TutorialState.start(tutorialPrefs.getLastStep())
+                    }
+                }
+
+                // Persist the current tutorial step so process-death mid-tour can
+                // resume roughly where the user was.
+                LaunchedEffect(TutorialState.currentStepIndex, TutorialState.isActive) {
+                    if (TutorialState.isActive) {
+                        tutorialPrefs.setLastStep(TutorialState.currentStepIndex)
+                    }
+                }
+
+                // Check if backup folder is configured on startup. Suppress this
+                // auto-redirect while the tutorial is running — the tutorial will
+                // walk the user into Settings itself.
+                LaunchedEffect(Unit) {
+                    if (!configManager.isConfigured() && !TutorialState.isActive &&
+                        tutorialPrefs.hasCompletedTutorial()
+                    ) {
                         Toast.makeText(
                             this@MainActivity,
                             "Please select a backup folder in Settings",
@@ -287,7 +313,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                // Navigation: Show either MainScreen or SettingsScreen
+                // Navigation: Show either MainScreen or SettingsScreen.
+                // Wrapped in a Box so the tutorial overlay can draw on top.
+                Box(modifier = Modifier.fillMaxSize()) {
                 if (showSettingsScreen) {
                     SettingsScreen(
                         currentBackupPath = currentBackupPath,
@@ -535,7 +563,26 @@ class MainActivity : ComponentActivity() {
                         appVersion = APP_VERSION
                     )
                 }
-                
+
+                // First-launch tutorial overlay — always last sibling so it
+                // draws on top of whichever screen is currently visible.
+                val tutorialCallbacks = remember {
+                    TutorialCallbacks(
+                        openSettings = { showSettingsScreen = true },
+                        closeSettings = { showSettingsScreen = false },
+                        finish = {
+                            tutorialPrefs.setCompleted()
+                            TutorialState.finish()
+                        }
+                    )
+                }
+                TutorialOverlay(
+                    currentScreen = if (showSettingsScreen) TutorialScreen.SETTINGS else TutorialScreen.MAIN,
+                    hasProfiles = profiles.isNotEmpty(),
+                    callbacks = tutorialCallbacks
+                )
+                }
+
                 // Emulator selection dialog
                 if (showEmulatorDialog) {
                     SelectEmulatorDialog(

@@ -225,7 +225,8 @@ fun ProfilesSection(
                                 isAlternateRow = index % 2 == 1,
                                 onProfileClick = { onProfileSelect(profile.id) },
                                 onFavoriteClick = { onFavoriteToggle(profile.id) },
-                                onDeleteClick = { onDeleteProfile(profile.id) }
+                                onDeleteClick = { onDeleteProfile(profile.id) },
+                                isFirst = index == 0
                             )
                         }
                     }
