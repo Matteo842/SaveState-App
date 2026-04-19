@@ -12,8 +12,8 @@ android {
         applicationId = "com.savestate.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.8"
+        versionCode = 11
+        versionName = "0.8.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -63,6 +63,12 @@ dependencies {
     
     // Document File (SAF)
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // Explicit Fragment dependency to satisfy the InvalidFragmentVersionForActivityResult
+    // lint check. The app itself is Compose + ComponentActivity and never
+    // uses Fragments directly, but lint requires >= 1.3.0 whenever
+    // registerForActivityResult() is present.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     
     // Root access (libsu)
     implementation("com.github.topjohnwu.libsu:core:6.0.0")
@@ -76,3 +82,12 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+// Optional secure build script (gitignored). When present it pulls in the
+// real anti-piracy implementation and its dependencies. Public clones simply
+// skip this file and fall back to the no-op StubLicenseGuardProvider.
+val secureBuild = file("build-secure.gradle.kts")
+if (secureBuild.exists()) {
+    apply(from = secureBuild)
+}
+

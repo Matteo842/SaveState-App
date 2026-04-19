@@ -46,6 +46,11 @@ import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorInfo
 import com.savestate.app.data.model.GameProfile
+import com.savestate.app.security.LicenseGuard
+import com.savestate.app.security.LicenseGuardLoader
+import com.savestate.app.security.LicenseStatus
+import com.savestate.app.security.ui.LicenseBlockScreen
+import com.savestate.app.security.ui.LicenseCheckSplash
 import com.savestate.app.ui.dialogs.RestoreBackupDialog
 import com.savestate.app.ui.dialogs.ManageBackupsDialog
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
@@ -85,6 +90,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var backupManager: BackupManager
     private lateinit var profileRepository: ProfileRepository
     private lateinit var tutorialPrefs: TutorialPreferences
+    private lateinit var licenseGuard: LicenseGuard
     
     // Callback to run after storage permission is granted
     private var onStoragePermissionGranted: (() -> Unit)? = null
@@ -181,6 +187,7 @@ class MainActivity : ComponentActivity() {
         backupManager = BackupManager(applicationContext, settingsManager, rootAccessHelper)
         profileRepository = ProfileRepository(applicationContext, configManager)
         tutorialPrefs = TutorialPreferences(applicationContext)
+        licenseGuard = LicenseGuardLoader.load(applicationContext)
         
         // Initialize PSP game database from assets
         PPSSPPManager.initDatabase(applicationContext)
@@ -201,6 +208,34 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             SaveStateTheme {
+                // License gate — runs before any of the normal UI is mounted.
+                // Stays mounted across recompositions so verify() runs once
+                // unless the user manually retries.
+                var licenseStatus by remember { mutableStateOf<LicenseStatus?>(null) }
+                var licenseAttempt by remember { mutableStateOf(0) }
+
+                LaunchedEffect(licenseAttempt) {
+                    licenseStatus = null
+                    licenseStatus = withContext(Dispatchers.IO) { licenseGuard.verify() }
+                }
+
+                when (val status = licenseStatus) {
+                    null -> {
+                        LicenseCheckSplash()
+                        return@SaveStateTheme
+                    }
+                    is LicenseStatus.Blocked -> {
+                        LicenseBlockScreen(
+                            reason = status.reason,
+                            message = status.message,
+                            onOpenPlayStore = { openPlayStore() },
+                            onRetry = { licenseAttempt++ }
+                        )
+                        return@SaveStateTheme
+                    }
+                    LicenseStatus.Ok -> Unit
+                }
+
                 // State for emulator selection dialog
                 var showEmulatorDialog by remember { mutableStateOf(false) }
                 var isLoadingEmulators by remember { mutableStateOf(false) }
@@ -813,6 +848,29 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * Open the official Play Store listing for this app, falling back to the
+     * web URL if the Play Store app is not installed.
+     */
+    private fun openPlayStore() {
+        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            startActivity(market)
+        } catch (e: Exception) {
+            try {
+                startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (e2: Exception) {
+                Log.e("SaveState", "Cannot open Play Store: ${e2.message}")
+            }
+        }
+    }
+
     /**
      * Open the SAF folder picker
      */
