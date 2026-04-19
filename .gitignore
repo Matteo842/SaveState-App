@@ -16,3 +16,4 @@
 AS-key
 android-app/gradle/gradle-daemon-jvm.properties
 .cursor/rules/caveman.mdc
+android-app/app/src/main/assets/adi-registration.properties
