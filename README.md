@@ -30,6 +30,26 @@ The app is **functional** and can be used to:
 - ✅ Persist data across app reinstalls (when using external storage)
 - ✅ Optional **root mode** for saves under protected `Android/data/` paths
 
+## 🧪 Join the Play Store Beta
+
+SaveState App needs Android beta testers before the public Play Store release. If you use emulators on Android and want to help test backup/restore workflows, you can join the beta in a few minutes.
+
+### How to become a beta tester
+
+1. **Request access** through the [beta tester form](https://docs.google.com/forms/d/e/1FAIpQLScLShJjru50_oY3Of_wNSeZVs27coTnzcxUZaWegzsRcDRCfg/viewform?usp=header).
+2. **Join the Google Group** with the same Google account you use on Play Store: [SaveState Beta Test group](https://groups.google.com/g/savestate-beta-test/members).
+3. **Open the Play Store testing page** and opt in: [SaveState App beta](https://play.google.com/apps/testing/com.savestate.app).
+4. **Install or update the app** from the [Play Store listing](https://play.google.com/store/apps/details?id=com.savestate.app).
+
+### What to test
+
+- Emulator detection on your device
+- Backup and restore for real game saves
+- Root mode behavior, if you use a rooted Android device
+- Problems with permissions, storage folders, missing games, or failed restores
+
+Please report what device, Android version, emulator, and game you tested when sharing feedback. This makes bugs much easier to reproduce and fix.
+
 ### What’s new in v0.8
 
 - **First-launch tutorial**: interactive coach-marks (spotlight + tooltips) that walk through storage permission, backup folder in Settings, profile creation, Backup / Restore / Manage, and favorites—shown once per install.
