@@ -35,6 +35,7 @@ fun MainScreen(
     onProfileSelect: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
+    onEditProfile: (String) -> Unit,
     onBackupClick: () -> Unit,
     onRestoreClick: () -> Unit,
     onManageBackupsClick: () -> Unit,
@@ -80,6 +81,7 @@ fun MainScreen(
                     onProfileSelect = onProfileSelect,
                     onFavoriteToggle = onFavoriteToggle,
                     onDeleteProfile = onDeleteProfile,
+                    onEditProfile = onEditProfile,
                     compact = true,
                     showSectionTitle = false,
                     modifier = Modifier
@@ -125,6 +127,7 @@ fun MainScreen(
                     onProfileSelect = onProfileSelect,
                     onFavoriteToggle = onFavoriteToggle,
                     onDeleteProfile = onDeleteProfile,
+                    onEditProfile = onEditProfile,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -161,6 +164,7 @@ fun ProfilesSection(
     onProfileSelect: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
+    onEditProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     /** Landscape: hide red "Profiles" label to free vertical space for the list */
@@ -226,6 +230,7 @@ fun ProfilesSection(
                                 onProfileClick = { onProfileSelect(profile.id) },
                                 onFavoriteClick = { onFavoriteToggle(profile.id) },
                                 onDeleteClick = { onDeleteProfile(profile.id) },
+                                onEditClick = { onEditProfile(profile.id) },
                                 isFirst = index == 0
                             )
                         }

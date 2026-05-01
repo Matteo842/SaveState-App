@@ -1,16 +1,22 @@
 package com.savestate.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +41,7 @@ import com.savestate.app.ui.tutorial.tutorialTarget
  * - Delete button on hover/selection
  * - Emulator icon + game name layout
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ProfileCard(
     profile: GameProfile,
@@ -43,6 +50,7 @@ fun ProfileCard(
     onProfileClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    onEditClick: () -> Unit,
     modifier: Modifier = Modifier,
     isFirst: Boolean = false
 ) {
@@ -52,13 +60,21 @@ fun ProfileCard(
         else -> DarkSurfaceVariant
     }
 
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
             .background(backgroundColor)
             .then(if (isFirst) Modifier.tutorialTarget("first_profile_row") else Modifier)
-            .clickable { onProfileClick() },
+            .combinedClickable(
+                onClick = { onProfileClick() },
+                onLongClick = {
+                    onProfileClick()
+                    menuExpanded = true
+                }
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Red selection indicator (like desktop app)
@@ -131,21 +147,50 @@ fun ProfileCard(
         }
 
 
-        // Delete button (visible on selection like desktop)
-        if (isSelected) {
-            IconButton(
-                onClick = onDeleteClick,
-                modifier = Modifier.size(40.dp)
+        // Delete button (visible on selection like desktop) + context menu anchor
+        Box {
+            if (isSelected) {
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Delete profile",
+                        tint = StatusError,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(40.dp))
+            }
+
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete profile",
-                    tint = StatusError,
-                    modifier = Modifier.size(20.dp)
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "Edit Profile",
+                            color = TextPrimary,
+                            fontSize = 14.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = null,
+                            tint = SaveStateRed,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onEditClick()
+                    }
                 )
             }
-        } else {
-            Spacer(modifier = Modifier.width(40.dp))
         }
     }
 }

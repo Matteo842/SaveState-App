@@ -55,6 +55,7 @@ import com.savestate.app.ui.dialogs.RestoreBackupDialog
 import com.savestate.app.ui.dialogs.ManageBackupsDialog
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
+import com.savestate.app.ui.screens.EditProfileScreen
 import com.savestate.app.ui.screens.MainScreen
 import com.savestate.app.ui.screens.SettingsScreen
 import com.savestate.app.ui.theme.*
@@ -257,6 +258,7 @@ class MainActivity : ComponentActivity() {
                 
                 // Navigation state
                 var showSettingsScreen by remember { mutableStateOf(false) }
+                var editingProfileId by remember { mutableStateOf<String?>(null) }
                 
                 // Settings state
                 var currentBackupPath by remember { mutableStateOf(settingsManager.getBackupPath()) }
@@ -348,10 +350,30 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                // Navigation: Show either MainScreen or SettingsScreen.
-                // Wrapped in a Box so the tutorial overlay can draw on top.
+                // Navigation: Show either MainScreen, SettingsScreen, or
+                // EditProfileScreen. Wrapped in a Box so the tutorial overlay
+                // can draw on top.
+                val editingProfile = profiles.find { it.id == editingProfileId }
                 Box(modifier = Modifier.fillMaxSize()) {
-                if (showSettingsScreen) {
+                if (editingProfile != null) {
+                    EditProfileScreen(
+                        profile = editingProfile,
+                        onSave = { updated ->
+                            profiles = profiles.map { p ->
+                                if (p.id == updated.id) updated else p
+                            }
+                            profileRepository.saveProfiles(profiles)
+                            editingProfileId = null
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Profile updated",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onCancel = { editingProfileId = null },
+                        appVersion = APP_VERSION
+                    )
+                } else if (showSettingsScreen) {
                     SettingsScreen(
                         currentBackupPath = currentBackupPath,
                         backupInfo = backupInfo,
@@ -476,6 +498,9 @@ class MainActivity : ComponentActivity() {
                             profiles = profiles.filter { it.id != id }
                             profileRepository.saveProfiles(profiles)
                             if (selectedProfileId == id) selectedProfileId = null
+                        },
+                        onEditProfile = { id ->
+                            editingProfileId = id
                         },
                         onBackupClick = {
                             // Find the selected profile
