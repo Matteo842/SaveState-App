@@ -14,7 +14,15 @@ data class EmulatorInfo(
     val isInstalled: Boolean = true,
     val defaultSavePaths: List<String> = emptyList(),
     val requiresRoot: Boolean = false,
-    val rootSavePaths: List<String> = emptyList()
+    val rootSavePaths: List<String> = emptyList(),
+    /**
+     * If true the emulator can also be used **without** root by letting the
+     * user pick a custom save folder via SAF (because the emulator itself
+     * exposes a "custom save path" setting that points outside Android/data).
+     * In that case the emulator is NOT disabled when root mode is off — it
+     * falls back to the standard manual folder picker.
+     */
+    val supportsManualPath: Boolean = false
 )
 
 /**
@@ -42,7 +50,8 @@ object EmulatorConfig {
         val displayName: String,
         val defaultSavePaths: List<String>,
         val requiresRoot: Boolean = false,
-        val rootSavePaths: List<String> = emptyList()
+        val rootSavePaths: List<String> = emptyList(),
+        val supportsManualPath: Boolean = false
     )
     
     val knownEmulators = listOf(
@@ -287,6 +296,8 @@ object EmulatorConfig {
         ),
 
         // Eden - Nintendo Switch emulator (Yuzu fork)
+        // Root preferred (Android/data/.../files/nand/user/save), but Eden also
+        // exposes a custom save-path setting → SAF fallback supported.
         EmulatorDefinition(
             emulatorType = Emulator.EDEN,
             packageNames = listOf(
@@ -304,7 +315,8 @@ object EmulatorConfig {
                 "/storage/emulated/0/Android/data/dev.eden.eden_emulator/files",
                 "/storage/emulated/0/Android/data/dev.eden.eden_nightly/files",
                 "/storage/emulated/0/Android/data/dev.legacy.eden_emulator/files"
-            )
+            ),
+            supportsManualPath = true
         )
     )
     

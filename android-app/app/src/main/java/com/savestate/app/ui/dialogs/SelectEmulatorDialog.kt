@@ -103,7 +103,12 @@ fun SelectEmulatorDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(installedEmulators) { emulator ->
-                            val isDisabled = emulator.requiresRoot && !isRootModeEnabled
+                            // An emulator is disabled only when it strictly needs
+                            // root AND the user has not enabled root mode AND it
+                            // does not also support a manual SAF fallback.
+                            val isDisabled = emulator.requiresRoot &&
+                                !isRootModeEnabled &&
+                                !emulator.supportsManualPath
                             EmulatorListItem(
                                 emulator = emulator,
                                 isDisabled = isDisabled,

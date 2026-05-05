@@ -100,8 +100,14 @@ fun SelectGameDialog(
                     }
                 } else if (detectedGames.isEmpty()) {
                     if (isRootMode) {
-                        // Root mode empty: scan found nothing
-                        RootEmptyState(emulatorName = emulator.emulatorType.displayName)
+                        // Root mode empty: scan found nothing — offer manual
+                        // SAF fallback if the emulator supports a custom save
+                        // path (e.g. Eden's custom save-data location).
+                        RootEmptyState(
+                            emulatorName = emulator.emulatorType.displayName,
+                            supportsManualPath = emulator.supportsManualPath,
+                            onBrowseFolder = onBrowseFolder
+                        )
                     } else {
                         // Normal mode: ask user to select folder
                         SelectFolderPrompt(
@@ -217,6 +223,7 @@ private fun SelectFolderPrompt(
 ) {
     val isRetroArch = emulatorName == "RetroArch"
     val isDolphin = emulatorName == "Dolphin"
+    val isEden = emulatorName == "Eden"
     
     // Get folder structure based on emulator
     val folderPath = when (emulatorName) {
@@ -351,6 +358,7 @@ private fun SelectFolderPrompt(
                     text = when {
                         isRetroArch -> "Make sure RetroArch saves to an accessible folder (e.g. Internal Storage/RetroArch), not the default Android/data location."
                         isDolphin -> "Make sure Dolphin's user directory is set to an accessible folder (e.g. Internal Storage/dolphin-emu)."
+                        isEden -> "Without root, Eden must be configured with a custom save path: open Eden → Settings → System → Storage and set a save data location outside Android/data, then pick that folder here."
                         else -> "If you haven't set a custom save folder in your emulator, the default Android/data location may not be accessible."
                     },
                     color = TextSecondary,
@@ -364,9 +372,15 @@ private fun SelectFolderPrompt(
 
 /**
  * Shown when a root scan completes but finds no saves.
+ * If [supportsManualPath] is true, also offers a SAF "Browse manually" button
+ * so the user can locate a custom save folder configured inside the emulator.
  */
 @Composable
-private fun RootEmptyState(emulatorName: String) {
+private fun RootEmptyState(
+    emulatorName: String,
+    supportsManualPath: Boolean = false,
+    onBrowseFolder: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -392,12 +406,46 @@ private fun RootEmptyState(emulatorName: String) {
         )
 
         Text(
-            text = "No save data was found in $emulatorName's protected folders.\nMake sure the emulator has been launched at least once and has save data.",
+            text = if (supportsManualPath) {
+                "No save data was found in $emulatorName's default folders.\n" +
+                    "If you set a custom save path inside $emulatorName, " +
+                    "browse to that folder manually below."
+            } else {
+                "No save data was found in $emulatorName's protected folders.\n" +
+                    "Make sure the emulator has been launched at least once and has save data."
+            },
             color = TextSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )
+
+        if (supportsManualPath) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = onBrowseFolder,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SaveStateRed
+                ),
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Browse Save Folder",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.weight(1f, fill = false))
     }

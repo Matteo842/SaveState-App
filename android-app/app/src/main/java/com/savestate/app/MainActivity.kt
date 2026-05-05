@@ -676,8 +676,15 @@ class MainActivity : ComponentActivity() {
                             // File-prefix backup for emulators that store saves as flat files
                             val filePrefix = game.gameFilePrefix
                             
-                            // Create a new profile with the selected game
-                            val isRoot = selectedEmulator!!.requiresRoot && isRootModeEnabled
+                            // Determine root vs SAF from the actual save path
+                            // returned by the scanner (root scans return plain
+                            // filesystem paths, SAF scans return content:// URIs).
+                            // This is important for emulators that support both
+                            // modes (e.g. Eden), where a manual SAF fallback may
+                            // happen even with root mode enabled.
+                            val isRoot = !game.savePath.startsWith("content://") &&
+                                selectedEmulator!!.requiresRoot &&
+                                isRootModeEnabled
                             val newProfile = GameProfile(
                                 id = UUID.randomUUID().toString(),
                                 name = game.gameName,
