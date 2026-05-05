@@ -10,14 +10,19 @@ import org.json.JSONObject
 /**
  * Handles Eden (Nintendo Switch) save detection and scanning.
  *
- * Eden is a Yuzu fork, so it reuses the same on-disk layout:
- *   <root>/nand/user/save/<save_data_space>/<account_id>/<title_id>/
+ * Eden is a Yuzu fork. Per `src/core/file_sys/savedata_factory.cpp`:
  *
- *   save_data_space: "0000000000000000" for user saves (16 hex chars)
- *   account_id:      16-char hex, user profile UUID (short form)
- *   title_id:        16-char hex, Nintendo Switch game ID
+ * OLD layout (still default for existing installs):
+ *   <root>/nand/user/save/<space>/<account_id>/<title_id>/
+ *     space:      "0000000000000000" (16-hex, masked save_id == 0)
+ *     account_id: 32-hex string (concat of user_id[1] + user_id[0], UPPERCASE)
+ *     title_id:   16-hex string (UPPERCASE)
  *
- * Each <title_id> folder represents a single game's save.
+ * NEW "future" layout (preferred when present):
+ *   <root>/nand/user/save/account/<uuid_raw>/<title_id>/0/    (Account saves)
+ *   <root>/nand/user/save/device/<title_id>/0/                (Device saves)
+ *     uuid_raw:   32-hex string (lowercase, no hyphens — Common::UUID::RawString())
+ *     title_id:   16-hex string (UPPERCASE)
  *
  * User-accessible path (when Eden's user directory is set to internal storage):
  *   /storage/emulated/0/Eden/nand/user/save/...
@@ -31,15 +36,15 @@ class EdenManager {
     companion object {
         private const val TAG = "EdenManager"
 
-        /** Switch IDs are 16-character hex strings. */
+        /** Switch title-IDs and save-space folders are 16-char hex. */
         private val HEX16 = Regex("^[0-9a-fA-F]{16}$")
 
-        /** The default save-data space (user saves) folder name. */
-        private const val USER_SAVE_SPACE = "0000000000000000"
+        /** Account folders (both legacy concat-u128 and new UUID raw) are 32-char hex. */
+        private val HEX32 = Regex("^[0-9a-fA-F]{32}$")
 
         /** Folder names walked through when looking for title-id folders. */
         private val WALK_FOLDER_NAMES = setOf(
-            "eden", "nand", "user", "save", "sdmc", "data"
+            "eden", "nand", "user", "save", "sdmc", "data", "account", "device"
         )
 
         // ── Switch game-title database ──────────────────────────────────
@@ -111,17 +116,20 @@ class EdenManager {
     }
 
     /**
-     * Walk at most 6 levels deep looking for title-id folders.
-     * The Switch path is: save/<space>/<account>/<title>, so a top-level
-     * Eden root folder may sit 3–5 levels above the title dir.
+     * Walk at most 7 levels deep looking for title-id folders.
+     * Possible paths from a top-level Eden root:
+     *   <root>/nand/user/save/<space16>/<account32>/<title16>          (OLD)
+     *   <root>/nand/user/save/account/<uuid32>/<title16>/0/...         (NEW)
+     *   <root>/nand/user/save/device/<title16>/0/...                   (NEW device)
      */
     private fun collectTitleDirsSaf(
         dir: DocumentFile,
         results: MutableList<DocumentFile>,
         depth: Int
     ) {
-        if (depth > 6) return
+        if (depth > 7) return
         val children = dir.listFiles()
+        val parentName = dir.name ?: ""
 
         for (child in children) {
             if (!child.isDirectory) continue
@@ -129,26 +137,30 @@ class EdenManager {
             if (name.startsWith(".")) continue
 
             if (HEX16.matches(name)) {
-                // A 16-hex folder at this depth is a title-id when we are
-                // inside an <account_id> folder. We use heuristics: if the
-                // parent looks like an account folder (also 16-hex) and the
-                // title folder contains files, treat it as a game.
-                val parentName = dir.name ?: ""
-                val looksLikeAccountChild = HEX16.matches(parentName) &&
-                    !parentName.equals(USER_SAVE_SPACE, true)
+                // A 16-hex folder is a title-id when its parent is:
+                //   - a 32-hex account folder (covers OLD account, NEW account/uuid)
+                //   - "device" literal        (covers NEW save/device/<title>/0/)
+                val isTitleId = HEX32.matches(parentName) ||
+                    parentName.equals("device", ignoreCase = true)
 
-                if (looksLikeAccountChild) {
+                if (isTitleId) {
                     results.add(child)
                     continue
                 }
 
-                // Otherwise keep walking: could be the save-space or account
-                // folder itself. Recurse one deeper.
+                // Otherwise it is most likely the save-space folder
+                // ("0000000000000000"); recurse to discover account/title.
                 collectTitleDirsSaf(child, results, depth + 1)
                 continue
             }
 
-            if (name.lowercase() in WALK_FOLDER_NAMES || depth < 3) {
+            // 32-hex account folder → recurse to find title-ids inside.
+            if (HEX32.matches(name)) {
+                collectTitleDirsSaf(child, results, depth + 1)
+                continue
+            }
+
+            if (name.lowercase() in WALK_FOLDER_NAMES || depth < 4) {
                 collectTitleDirsSaf(child, results, depth + 1)
             }
         }
@@ -248,10 +260,16 @@ class EdenManager {
         for (sub in subdirs) {
             if (sub.equals("save", true)) {
                 val candidate = "$dir/$sub"
-                // Only treat as the save dir if it holds a 16-hex child.
-                if (root.listDirectories(candidate).any { HEX16.matches(it) }) {
-                    return candidate
+                // Treat as the save dir if it holds any of:
+                //   - a 16-hex space folder (OLD layout)
+                //   - "account" / "device" literal (NEW layout)
+                val children = root.listDirectories(candidate)
+                val looksLikeSave = children.any {
+                    HEX16.matches(it) ||
+                        it.equals("account", ignoreCase = true) ||
+                        it.equals("device", ignoreCase = true)
                 }
+                if (looksLikeSave) return candidate
             }
             val nested = findSaveDirRoot(root, "$dir/$sub", depth + 1)
             if (nested != null) return nested
@@ -264,35 +282,74 @@ class EdenManager {
         savePath: String
     ): List<DetectedGame> {
         val results = mutableListOf<DetectedGame>()
+        val seenTitlePaths = mutableSetOf<String>()
 
-        for (space in root.listDirectories(savePath)) {
-            if (!HEX16.matches(space)) continue
-            val spacePath = "$savePath/$space"
+        for (entry in root.listDirectories(savePath)) {
+            val entryPath = "$savePath/$entry"
+            when {
+                // NEW: save/account/<uuid32>/<title16>/0/
+                entry.equals("account", ignoreCase = true) -> {
+                    for (uuid in root.listDirectories(entryPath)) {
+                        if (!HEX32.matches(uuid)) continue
+                        val uuidPath = "$entryPath/$uuid"
+                        for (titleId in root.listDirectories(uuidPath)) {
+                            if (!HEX16.matches(titleId)) continue
+                            val titlePath = "$uuidPath/$titleId"
+                            if (seenTitlePaths.add(titlePath)) {
+                                results.add(buildRootGame(root, titleId, titlePath, uuidPath))
+                            }
+                        }
+                    }
+                }
 
-            for (account in root.listDirectories(spacePath)) {
-                if (!HEX16.matches(account)) continue
-                val accountPath = "$spacePath/$account"
+                // NEW: save/device/<title16>/0/
+                entry.equals("device", ignoreCase = true) -> {
+                    for (titleId in root.listDirectories(entryPath)) {
+                        if (!HEX16.matches(titleId)) continue
+                        val titlePath = "$entryPath/$titleId"
+                        if (seenTitlePaths.add(titlePath)) {
+                            results.add(buildRootGame(root, titleId, titlePath, entryPath))
+                        }
+                    }
+                }
 
-                for (titleId in root.listDirectories(accountPath)) {
-                    if (!HEX16.matches(titleId)) continue
-                    val titlePath = "$accountPath/$titleId"
-
-                    val displayName = getGameNameFromDatabase(titleId) ?: titleId
-                    results.add(
-                        DetectedGame(
-                            gameId = "switch_$titleId",
-                            gameName = displayName,
-                            savePath = titlePath,
-                            parentPath = accountPath,
-                            emulatorType = Emulator.EDEN,
-                            saveCount = root.countFiles(titlePath),
-                            lastModified = root.getLastModified(titlePath)
-                        )
-                    )
+                // OLD: save/<space16>/<account32>/<title16>/
+                HEX16.matches(entry) -> {
+                    val spacePath = entryPath
+                    for (account in root.listDirectories(spacePath)) {
+                        if (!HEX32.matches(account)) continue
+                        val accountPath = "$spacePath/$account"
+                        for (titleId in root.listDirectories(accountPath)) {
+                            if (!HEX16.matches(titleId)) continue
+                            val titlePath = "$accountPath/$titleId"
+                            if (seenTitlePaths.add(titlePath)) {
+                                results.add(buildRootGame(root, titleId, titlePath, accountPath))
+                            }
+                        }
+                    }
                 }
             }
         }
 
+        Log.d(TAG, "rootScanSaveTree($savePath): ${results.size} title(s) found")
         return results
+    }
+
+    private fun buildRootGame(
+        root: RootAccessHelper,
+        titleId: String,
+        titlePath: String,
+        parentPath: String
+    ): DetectedGame {
+        val displayName = getGameNameFromDatabase(titleId) ?: titleId
+        return DetectedGame(
+            gameId = "switch_$titleId",
+            gameName = displayName,
+            savePath = titlePath,
+            parentPath = parentPath,
+            emulatorType = Emulator.EDEN,
+            saveCount = root.countFiles(titlePath),
+            lastModified = root.getLastModified(titlePath)
+        )
     }
 }
