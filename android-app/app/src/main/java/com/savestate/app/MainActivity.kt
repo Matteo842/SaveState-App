@@ -46,6 +46,7 @@ import com.savestate.app.data.model.DetectedGame
 import com.savestate.app.data.model.Emulator
 import com.savestate.app.data.model.EmulatorInfo
 import com.savestate.app.data.model.GameProfile
+import com.savestate.app.security.LicenseGate
 import com.savestate.app.security.LicenseGuard
 import com.savestate.app.security.LicenseGuardLoader
 import com.savestate.app.security.LicenseStatus
@@ -189,7 +190,13 @@ class MainActivity : ComponentActivity() {
         profileRepository = ProfileRepository(applicationContext, configManager)
         tutorialPrefs = TutorialPreferences(applicationContext)
         licenseGuard = LicenseGuardLoader.load(applicationContext)
-        
+
+        // Kick off license verification once per process. Subsequent
+        // Activity recreations (rotation, theme/locale changes) reuse the
+        // cached result via [LicenseGate] instead of re-running verify and
+        // flashing the splash screen.
+        LicenseGate.ensureStarted(licenseGuard)
+
         // Initialize PSP game database from assets
         PPSSPPManager.initDatabase(applicationContext)
 
@@ -214,16 +221,13 @@ class MainActivity : ComponentActivity() {
             var isDarkTheme by remember { mutableStateOf(initialDarkTheme) }
 
             SaveStateTheme(darkTheme = isDarkTheme) {
-                // License gate — runs before any of the normal UI is mounted.
-                // Stays mounted across recompositions so verify() runs once
-                // unless the user manually retries.
-                var licenseStatus by remember { mutableStateOf<LicenseStatus?>(null) }
-                var licenseAttempt by remember { mutableStateOf(0) }
-
-                LaunchedEffect(licenseAttempt) {
-                    licenseStatus = null
-                    licenseStatus = withContext(Dispatchers.IO) { licenseGuard.verify() }
-                }
+                // License gate — backed by a process-level cache
+                // ([LicenseGate]) so configuration changes (e.g. rotation)
+                // do NOT re-trigger verify() and do NOT flash the splash.
+                // The verify call itself was kicked off in onCreate via
+                // [LicenseGate.ensureStarted]; here we only render based
+                // on the latest emitted status.
+                val licenseStatus by LicenseGate.status.collectAsState()
 
                 when (val status = licenseStatus) {
                     null -> {
@@ -235,7 +239,7 @@ class MainActivity : ComponentActivity() {
                             reason = status.reason,
                             message = status.message,
                             onOpenPlayStore = { openPlayStore() },
-                            onRetry = { licenseAttempt++ }
+                            onRetry = { LicenseGate.retry(licenseGuard) }
                         )
                         return@SaveStateTheme
                     }
