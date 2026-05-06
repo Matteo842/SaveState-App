@@ -206,9 +206,14 @@ class MainActivity : ComponentActivity() {
         
         // Load saved profiles
         val savedProfiles = profileRepository.loadProfiles()
-        
+        val initialDarkTheme = settingsManager.isDarkThemeEnabled()
+
         setContent {
-            SaveStateTheme {
+            // Theme state: persisted via SettingsManager so the choice
+            // survives process death and matches whatever the user last set.
+            var isDarkTheme by remember { mutableStateOf(initialDarkTheme) }
+
+            SaveStateTheme(darkTheme = isDarkTheme) {
                 // License gate — runs before any of the normal UI is mounted.
                 // Stays mounted across recompositions so verify() runs once
                 // unless the user manually retries.
@@ -253,7 +258,6 @@ class MainActivity : ComponentActivity() {
                 
                 // Profile state - load from disk
                 var selectedProfileId by remember { mutableStateOf<String?>(null) }
-                var isDarkTheme by remember { mutableStateOf(true) }
                 var profiles by remember { mutableStateOf(savedProfiles) }
                 
                 // Navigation state
@@ -618,7 +622,10 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onSettingsClick = { showSettingsScreen = true },
-                        onThemeToggle = { isDarkTheme = !isDarkTheme },
+                        onThemeToggle = {
+                            isDarkTheme = !isDarkTheme
+                            settingsManager.setDarkThemeEnabled(isDarkTheme)
+                        },
                         isDarkTheme = isDarkTheme,
                         appVersion = APP_VERSION
                     )

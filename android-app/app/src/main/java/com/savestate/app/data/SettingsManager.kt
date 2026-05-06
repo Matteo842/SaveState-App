@@ -28,6 +28,8 @@ class SettingsManager(
         private const val KEY_COMPRESSION_LEVEL = "compressionLevel"
         private const val DEFAULT_COMPRESSION_LEVEL = 6
         private const val KEY_ROOT_MODE = "rootModeEnabled"
+        private const val KEY_DARK_THEME = "darkThemeEnabled"
+        private const val DEFAULT_DARK_THEME = true
     }
     
     // Fallback internal file
@@ -171,6 +173,35 @@ class SettingsManager(
             writeSettingsJson(obj.toString(2))
         } catch (e: Exception) {
             Log.e(TAG, "Error saving root mode: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Reads the persisted theme preference. Defaults to dark for parity with
+     * previous app behavior.
+     */
+    fun isDarkThemeEnabled(): Boolean {
+        return try {
+            val json = readSettingsJson() ?: return DEFAULT_DARK_THEME
+            val obj = JSONObject(json)
+            obj.optBoolean(KEY_DARK_THEME, DEFAULT_DARK_THEME)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading theme preference: ${e.message}", e)
+            DEFAULT_DARK_THEME
+        }
+    }
+
+    /**
+     * Persists the dark-theme preference. When true → dark palette, false → light.
+     */
+    fun setDarkThemeEnabled(enabled: Boolean) {
+        try {
+            val json = readSettingsJson() ?: "{}"
+            val obj = JSONObject(json)
+            obj.put(KEY_DARK_THEME, enabled)
+            writeSettingsJson(obj.toString(2))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving theme preference: ${e.message}", e)
         }
     }
     

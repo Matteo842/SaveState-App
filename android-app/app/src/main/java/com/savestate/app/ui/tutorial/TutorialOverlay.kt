@@ -111,6 +111,9 @@ fun TutorialOverlay(
         val ringPx = with(density) { 2.dp.toPx() }
         val containerHeightPx = with(density) { maxHeight.toPx() }
         val cardMarginPx = with(density) { 16.dp.toPx() }
+        // Resolve theme-aware colors here (composable scope) so they can be
+        // captured by the Canvas DrawScope lambda below.
+        val ringColor = SaveStateRed
 
         Canvas(
             modifier = Modifier
@@ -129,7 +132,7 @@ fun TutorialOverlay(
                     blendMode = BlendMode.Clear
                 )
                 drawRoundRect(
-                    color = SaveStateRed,
+                    color = ringColor,
                     topLeft = holeTopLeft,
                     size = holeSize,
                     cornerRadius = CornerRadius(cornerPx, cornerPx),
