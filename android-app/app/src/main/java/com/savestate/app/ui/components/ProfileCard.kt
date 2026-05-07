@@ -52,7 +52,9 @@ fun ProfileCard(
     onDeleteClick: () -> Unit,
     onEditClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isFirst: Boolean = false
+    isFirst: Boolean = false,
+    /** Tighter row for landscape list */
+    compact: Boolean = false
 ) {
     val backgroundColor = when {
         isSelected -> DarkTableRowSelected
@@ -62,10 +64,13 @@ fun ProfileCard(
 
     var menuExpanded by remember { mutableStateOf(false) }
 
+    val rowHeight = if (compact) 48.dp else 56.dp
+    val starBtn = if (compact) 36.dp else 40.dp
+    val delCol = if (compact) 36.dp else 40.dp
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(rowHeight)
             .background(backgroundColor)
             .then(if (isFirst) Modifier.tutorialTarget("first_profile_row") else Modifier)
             .combinedClickable(
@@ -89,14 +94,14 @@ fun ProfileCard(
         IconButton(
             onClick = onFavoriteClick,
             modifier = Modifier
-                .size(40.dp)
+                .size(starBtn)
                 .then(if (isFirst) Modifier.tutorialTarget("favorite_btn") else Modifier)
         ) {
             Icon(
                 imageVector = if (profile.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
                 contentDescription = if (profile.isFavorite) "Remove from favorites" else "Add to favorites",
                 tint = if (profile.isFavorite) StarGold else StarEmpty,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(if (compact) 18.dp else 20.dp)
             )
         }
 
@@ -152,17 +157,17 @@ fun ProfileCard(
             if (isSelected) {
                 IconButton(
                     onClick = onDeleteClick,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(starBtn)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Delete,
                         contentDescription = "Delete profile",
                         tint = StatusError,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(if (compact) 18.dp else 20.dp)
                     )
                 }
             } else {
-                Spacer(modifier = Modifier.width(40.dp))
+                Spacer(modifier = Modifier.width(delCol))
             }
 
             DropdownMenu(

@@ -29,28 +29,52 @@ fun SaveStateTopBar(
     isDarkTheme: Boolean = true,
     onThemeToggle: () -> Unit,
     onSettingsClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Shorter bar and title in landscape to give content more height */
+    compact: Boolean = false
 ) {
+    val barHeight = if (compact) 44.dp else 56.dp
+    val titleMain = if (compact) 16.sp else 18.sp
+    val titleSub = if (compact) 12.sp else 0.sp
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = DarkBackground,
-        shadowElevation = 4.dp
+        shadowElevation = if (compact) 2.dp else 4.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 16.dp),
+                .height(barHeight)
+                .padding(horizontal = if (compact) 12.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // App title - "SaveState - X.X" like desktop
-            Text(
-                text = "SaveState - $appVersion",
-                color = TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            // App title — full version in portrait; compact + subtitle in landscape
+            if (compact) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "SaveState",
+                        color = TextPrimary,
+                        fontSize = titleMain,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "v$appVersion",
+                        color = TextMuted,
+                        fontSize = titleSub,
+                        fontWeight = FontWeight.Normal,
+                        modifier = Modifier.padding(bottom = 1.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = "SaveState - $appVersion",
+                    color = TextPrimary,
+                    fontSize = titleMain,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             
             // Right side icons
             Row(
@@ -58,6 +82,7 @@ fun SaveStateTopBar(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Settings gear icon
+                val iconSize = if (compact) 20.dp else 22.dp
                 IconButton(
                     onClick = onSettingsClick,
                     modifier = Modifier.tutorialTarget("settings_btn")
@@ -66,7 +91,7 @@ fun SaveStateTopBar(
                         imageVector = Icons.Filled.Settings,
                         contentDescription = "Settings",
                         tint = TextSecondary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(iconSize)
                     )
                 }
                 
@@ -76,7 +101,7 @@ fun SaveStateTopBar(
                         imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
                         contentDescription = "Toggle theme",
                         tint = if (isDarkTheme) StarGold else TextSecondary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(iconSize)
                     )
                 }
             }
@@ -89,18 +114,22 @@ fun SaveStateTopBar(
  */
 @Composable
 fun ProfileTableHeader(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
+    val rowH = if (compact) 32.dp else 40.dp
+    val starCol = if (compact) 40.dp else 44.dp
+    val deleteCol = if (compact) 36.dp else 40.dp
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(rowH)
             .background(DarkSurface)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Empty space for star column
-        Spacer(modifier = Modifier.width(44.dp))
+        Spacer(modifier = Modifier.width(starCol))
         
         // Profile column header
         Text(
@@ -112,6 +141,6 @@ fun ProfileTableHeader(
         )
         
         // Space for delete button column
-        Spacer(modifier = Modifier.width(40.dp))
+        Spacer(modifier = Modifier.width(deleteCol))
     }
 }

@@ -2,8 +2,6 @@ package com.savestate.app.ui.screens
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -61,58 +59,59 @@ fun MainScreen(
             appVersion = appVersion,
             isDarkTheme = isDarkTheme,
             onThemeToggle = onThemeToggle,
-            onSettingsClick = onSettingsClick
+            onSettingsClick = onSettingsClick,
+            compact = isLandscape
         )
 
-        val contentPadding = if (isLandscape) 8.dp else 12.dp
+        val contentPadding = if (isLandscape) 6.dp else 12.dp
 
         if (isLandscape) {
-            val sideRailScroll = rememberScrollState()
-            Row(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(contentPadding),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top
+                    .weight(1f)
+                    .padding(contentPadding)
             ) {
-                ProfilesSection(
-                    profiles = profiles,
-                    selectedProfileId = selectedProfileId,
-                    onProfileSelect = onProfileSelect,
-                    onFavoriteToggle = onFavoriteToggle,
-                    onDeleteProfile = onDeleteProfile,
-                    onEditProfile = onEditProfile,
-                    compact = true,
-                    showSectionTitle = false,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                )
-                // Compact side rail (~10% narrower than previous step) → more width for profile list
-                Column(
-                    modifier = Modifier
-                        .widthIn(min = 128.dp, max = 168.dp)
-                        .fillMaxHeight()
-                        .verticalScroll(sideRailScroll),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                val railExtraDense = maxHeight < 292.dp
+                val selectedProfile = profiles.find { it.id == selectedProfileId }
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    ActionsSection(
+                    ProfilesSection(
+                        profiles = profiles,
+                        selectedProfileId = selectedProfileId,
+                        onProfileSelect = onProfileSelect,
+                        onFavoriteToggle = onFavoriteToggle,
+                        onDeleteProfile = onDeleteProfile,
+                        onEditProfile = onEditProfile,
+                        compact = true,
+                        showSectionTitle = false,
+                        showBackupFooter = false,
+                        compactTable = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    )
+                    ProfileDetailPanel(
+                        profile = selectedProfile,
+                        onEditProfile = onEditProfile,
+                        modifier = Modifier
+                            .weight(1.05f)
+                            .fillMaxHeight(),
+                        ultraCompact = railExtraDense
+                    )
+                    LandscapeUnifiedActionRail(
                         onBackupClick = onBackupClick,
                         onRestoreClick = onRestoreClick,
                         onManageBackupsClick = onManageBackupsClick,
-                        hasProfileSelected = selectedProfileId != null,
-                        compact = true,
-                        stackVertically = true,
-                        tightSpacing = true
-                    )
-                    GeneralSection(
                         onNewProfileClick = onNewProfileClick,
                         onSettingsClick = onSettingsClick,
-                        compact = true,
-                        stackVertically = true,
-                        tightSpacing = true
+                        hasProfileSelected = selectedProfileId != null,
+                        extraDense = railExtraDense,
+                        modifier = Modifier.fillMaxHeight()
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
                 }
             }
         } else {
@@ -168,7 +167,11 @@ fun ProfilesSection(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     /** Landscape: hide red "Profiles" label to free vertical space for the list */
-    showSectionTitle: Boolean = true
+    showSectionTitle: Boolean = true,
+    /** When false, backup summary lives in the detail panel (landscape master-detail) */
+    showBackupFooter: Boolean = true,
+    /** Tighter table header / rows (landscape list) */
+    compactTable: Boolean = false
 ) {
     // Favorites first; stable sort keeps prior order within favorites / non-favorites
     val displayProfiles = remember(profiles) {
@@ -191,7 +194,7 @@ fun ProfilesSection(
         ) {
             Column {
                 // Table header
-                ProfileTableHeader()
+                ProfileTableHeader(compact = compactTable)
                 
                 // Divider
                 HorizontalDivider(
@@ -231,57 +234,60 @@ fun ProfilesSection(
                                 onFavoriteClick = { onFavoriteToggle(profile.id) },
                                 onDeleteClick = { onDeleteProfile(profile.id) },
                                 onEditClick = { onEditProfile(profile.id) },
-                                isFirst = index == 0
+                                isFirst = index == 0,
+                                compact = compactTable
                             )
                         }
                     }
                 }
 
-                // Backup Info Footer (New)
-                HorizontalDivider(
-                    color = DarkSurface,
-                    thickness = 1.dp
-                )
+                if (showBackupFooter) {
+                    // Backup Info Footer
+                    HorizontalDivider(
+                        color = DarkSurface,
+                        thickness = 1.dp
+                    )
 
-                val selectedProfile = profiles.find { it.id == selectedProfileId }
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (compact) 40.dp else 50.dp)
-                        .background(DarkSurfaceVariant)
-                        .padding(horizontal = if (compact) 10.dp else 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    val footerStyle =
-                        if (compact) MaterialTheme.typography.bodySmall
-                        else MaterialTheme.typography.bodyMedium
-                    if (selectedProfile != null) {
-                        if (selectedProfile.backupCount > 0 && selectedProfile.lastBackup != null) {
-                            Text(
-                                text = "Backups: ${selectedProfile.backupCount} | Last: ${selectedProfile.lastBackup}",
-                                style = footerStyle,
-                                color = TextSecondary,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
+                    val selectedProfile = profiles.find { it.id == selectedProfileId }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(if (compact) 40.dp else 50.dp)
+                            .background(DarkSurfaceVariant)
+                            .padding(horizontal = if (compact) 10.dp else 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        val footerStyle =
+                            if (compact) MaterialTheme.typography.bodySmall
+                            else MaterialTheme.typography.bodyMedium
+                        if (selectedProfile != null) {
+                            if (selectedProfile.backupCount > 0 && selectedProfile.lastBackup != null) {
+                                Text(
+                                    text = "Backups: ${selectedProfile.backupCount} | Last: ${selectedProfile.lastBackup}",
+                                    style = footerStyle,
+                                    color = TextSecondary,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            } else {
+                                Text(
+                                    text = "No backups available",
+                                    style = footerStyle,
+                                    color = TextMuted,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
                         } else {
                             Text(
-                                text = "No backups available",
+                                text = "Select a profile to view details",
                                 style = footerStyle,
                                 color = TextMuted,
-                                fontWeight = FontWeight.Medium,
                                 maxLines = 1
                             )
                         }
-                    } else {
-                         Text(
-                            text = "Select a profile to view details",
-                            style = footerStyle,
-                            color = TextMuted,
-                            maxLines = 1
-                        )
                     }
                 }
             }
