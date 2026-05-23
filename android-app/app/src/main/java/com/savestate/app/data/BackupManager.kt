@@ -205,6 +205,20 @@ class BackupManager(
                         bytesWritten += bytes
                         onProgress?.invoke(bytesWritten, totalSize)
                     }
+                } else if (profile.requiresRoot && rootAccessHelper != null) {
+                    // Root directory backup: add children directly to ZIP root
+                    // WITHOUT a wrapper folder. The temp cache dir name (root_backup_temp)
+                    // must NOT leak into the archive – root restore copies flat content
+                    // straight into savePath.
+                    val totalSize = calculateTotalSize(sourceDocument)
+                    Log.d(TAG, "Root backup: adding ${sourceDocument.listFiles().size} items without wrapper folder")
+                    sourceDocument.listFiles().forEach { child ->
+                        val childName = child.name ?: return@forEach
+                        addDocumentToZip(zipOut, child, childName) { bytes ->
+                            bytesWritten += bytes
+                            onProgress?.invoke(bytesWritten, totalSize)
+                        }
+                    }
                 } else {
                     // Directory-level backup (PPSSPP, etc.): back up entire folder
                     val totalSize = calculateTotalSize(sourceDocument)
@@ -428,7 +442,27 @@ class BackupManager(
             // 5. For root profiles, copy from cache to protected path
             if (isRootRestore && rootRestoreTempDir != null) {
                 Log.i(TAG, "Root restore: copying from cache to ${profile.savePath}")
-                val copyOk = rootAccessHelper!!.copyFromCache(rootRestoreTempDir, profile.savePath)
+                
+                // Backward compatibility: backups created before the fix
+                // incorrectly wrapped all files inside a "root_backup_temp/"
+                // folder in the ZIP. Detect this and unwrap so files restore
+                // to the correct location.
+                val actualSourceDir = rootRestoreTempDir.listFiles()?.let { children ->
+                    val directFiles = children.filter { it.isFile }
+                    val legacyChild = children.find {
+                        it.isDirectory && it.name == "root_backup_temp"
+                    }
+                    if (legacyChild != null && directFiles.isEmpty()) {
+                        // Old format: every save file lives under root_backup_temp/
+                        Log.w(TAG, "Detected legacy root_backup_temp wrapper in backup – unwrapping")
+                        legacyChild
+                    } else {
+                        // New format (or mixed): files already at root level
+                        rootRestoreTempDir
+                    }
+                } ?: rootRestoreTempDir
+                
+                val copyOk = rootAccessHelper!!.copyFromCache(actualSourceDir, profile.savePath)
                 rootRestoreTempDir.deleteRecursively()
                 
                 if (!copyOk) {
