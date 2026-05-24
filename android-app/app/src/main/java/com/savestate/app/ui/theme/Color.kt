@@ -197,3 +197,11 @@ val SaveStateRedDark: Color
 
 val SaveStateRedLight: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentLight
+
+// Controller badge colors (Xbox-style, constant across themes)
+val BadgeA = Color(0xFF107C10)       // Xbox green
+val BadgeB = Color(0xFFE81123)       // Xbox red
+val BadgeX = Color(0xFF0078D7)       // Xbox blue
+val BadgeY = Color(0xFFFFB900)       // Xbox yellow
+val BadgeDefault = Color(0xFF5C5C5C)  // Generic gray for Start/Back
+

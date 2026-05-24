@@ -132,13 +132,23 @@ class RootAccessHelper {
      * The destination directory must be writable by the app (e.g. cache dir).
      * Uses `su` to read from the protected source and writes to an
      * app-accessible destination.
+     *
+     * Uses `cp -a` (archive) to preserve timestamps so that the extracted
+     * cache copy retains the original file modification times — important when
+     * these are later copied back to the emulator via [copyFromCache].
      */
     fun copyToCache(sourcePath: String, destDir: File): Boolean {
         destDir.mkdirs()
         val src = escapePath(sourcePath)
         val dst = escapePath(destDir.absolutePath)
 
-        val result = Shell.cmd("cp -rf '$src'/. '$dst/'").exec()
+        // Prefer cp -a (archive: preserves timestamps, permissions, symlinks).
+        // Fall back to cp -rf for older Android shells that lack -a.
+        var result = Shell.cmd("cp -a '$src'/. '$dst/'").exec()
+        if (!result.isSuccess) {
+            Log.w(TAG, "copyToCache: cp -a failed, retrying with cp -rf")
+            result = Shell.cmd("cp -rf '$src'/. '$dst/'").exec()
+        }
         if (!result.isSuccess) {
             Log.e(TAG, "copyToCache failed: ${result.out}")
         }
@@ -146,20 +156,176 @@ class RootAccessHelper {
     }
 
     /**
+     * Delete all files and subdirectories **inside** [dirPath] via root,
+     * without removing [dirPath] itself. Used to clear stale save files from
+     * a protected emulator directory before a restore operation.
+     *
+     * Safe to call even if the directory is empty; a non-existent path is a
+     * no-op (returns true).
+     */
+    fun deleteContents(dirPath: String): Boolean {
+        if (!directoryExists(dirPath)) return true // nothing to delete
+
+        val escaped = escapePath(dirPath)
+        // Delete everything inside the directory but keep the directory itself.
+        // `find -mindepth 1 -delete` works bottom-up so nested items are removed first.
+        val result = Shell.cmd(
+            "find '$escaped' -mindepth 1 -delete 2>/dev/null"
+        ).exec()
+        if (!result.isSuccess) {
+            // Fallback: rm -rf on the contents (slightly less safe but widely supported)
+            val fallback = Shell.cmd("rm -rf '$escaped'/* '$escaped'/.[!.]* 2>/dev/null").exec()
+            if (!fallback.isSuccess) {
+                Log.w(TAG, "deleteContents: could not clear '$dirPath' (non-fatal): ${fallback.out}")
+                return false
+            }
+        }
+        Log.d(TAG, "deleteContents: cleared '$dirPath'")
+        return true
+    }
+
+    /**
      * Copy the contents of [sourceDir] (app-writable) back to the
-     * protected [destPath] via root.
+     * protected [destPath] via root, then fix ownership and SELinux
+     * context so the target app can read its own save files.
+     *
+     * Root restore permission strategy:
+     *  1. Resolve numeric UID/GID by walking UP the path tree to avoid issues
+     *     with symbolic name resolution on different Android versions.
+     *  2. Use `cp -a` (archive mode) to preserve file timestamps — emulators
+     *     like Eden validate timestamp coherence and may discard saves with
+     *     future/zero timestamps produced by a plain `cp -rf`.
+     *  3. Apply Android-standard permissions: 0755 for directories and 0644
+     *     for files. Using 770/660 (no world-read) can break emulators that
+     *     read their own data through FUSE with a helper process running as a
+     *     different user in the same app's group.
+     *  4. Run `restorecon -RF` to fix SELinux labels.
      */
     fun copyFromCache(sourceDir: File, destPath: String): Boolean {
         val src = escapePath(sourceDir.absolutePath)
         val dst = escapePath(destPath)
 
-        val result = Shell.cmd(
-            "cp -rf '$src'/. '$dst/'"
-        ).exec()
-        if (!result.isSuccess) {
-            Log.e(TAG, "copyFromCache failed: ${result.out}")
+        // Ensure destination directory exists (Eden may have deleted it when
+        // the user cleared saves through the emulator UI).
+        Shell.cmd("mkdir -p '$dst'").exec()
+
+        // Resolve owner BEFORE copying.
+        // We prefer numeric uid:gid (e.g. "10123:10123") because symbolic
+        // names like "u0_a123" may not be resolvable in all shell environments.
+        // Fallback chain:
+        //   1. Numeric uid:gid from ancestor directory walk
+        //   2. Symbolic owner from ancestor directory walk
+        //   3. Package UID from `dumpsys package <pkg>` (when all ancestors are root-owned)
+        val numericOwner = findAppOwnerNumeric(destPath)
+        val symbolicOwner = if (numericOwner == null) findAppOwner(destPath) else null
+        val packageOwner = if (numericOwner == null && symbolicOwner == null)
+            getPackageUidFromPath(destPath)
+        else null
+        val resolvedOwner = numericOwner ?: symbolicOwner ?: packageOwner
+        Log.d(TAG, "copyFromCache: resolved owner='$resolvedOwner' " +
+                   "(numeric=$numericOwner, symbolic=$symbolicOwner, pkg=$packageOwner) for '$destPath'")
+
+        // Use cp -a (archive) to preserve timestamps — critical for emulators
+        // that validate save-file timestamps against internal NAND metadata.
+        // Fall back to cp -rf if -a is not supported.
+        var copyResult = Shell.cmd("cp -a '$src'/. '$dst/'").exec()
+        if (!copyResult.isSuccess) {
+            Log.w(TAG, "cp -a failed (${copyResult.out}), falling back to cp -rf")
+            copyResult = Shell.cmd("cp -rf '$src'/. '$dst/'").exec()
         }
-        return result.isSuccess
+        if (!copyResult.isSuccess) {
+            Log.e(TAG, "copyFromCache cp failed: ${copyResult.out}")
+            return false
+        }
+
+        // Restore ownership so the emulator app can read/write its saves.
+        if (resolvedOwner != null) {
+            val chownResult = Shell.cmd("chown -R '$resolvedOwner' '$dst'").exec()
+            if (!chownResult.isSuccess) {
+                Log.w(TAG, "chown after restore failed (non-fatal): ${chownResult.out}")
+            } else {
+                Log.d(TAG, "Restored ownership '$resolvedOwner' on '$dst'")
+            }
+        } else {
+            Log.w(TAG, "findAppOwner returned null for '$destPath' – skipping chown")
+        }
+
+        // Fix file permissions using Eden's exact native values:
+        //   - Directories: 0770 (rwxrwx---) so the emulator process and its
+        //     helper threads can traverse subdirectories.
+        //   - Files:       0660 (rw-rw----) so the emulator can read/write.
+        Shell.cmd(
+            "find '$dst' -type d -exec chmod 770 {} \\; 2>/dev/null ; " +
+            "find '$dst' -type f -exec chmod 660 {} \\; 2>/dev/null"
+        ).exec()
+
+        // Restore SELinux context so Android's security layer allows access.
+        // restorecon is a no-op on non-SELinux devices, so safe to always run.
+        val seResult = Shell.cmd("restorecon -RF '$dst' 2>/dev/null").exec()
+        if (!seResult.isSuccess) {
+            Log.d(TAG, "restorecon not available or failed (non-fatal)")
+        } else {
+            Log.d(TAG, "SELinux context restored on '$dst'")
+        }
+
+        Log.i(TAG, "copyFromCache complete: src=$src dst=$dst owner=$resolvedOwner")
+        return true
+    }
+
+    /**
+     * Walk UP the ancestor chain of [path] until we find a directory that is
+     * NOT owned by root. Returns the owner as a **numeric** "uid:gid" string
+     * (e.g. "10123:10123") which is more reliably usable in `chown` across
+     * all Android shell environments.
+     *
+     * Example walk for an Eden save:
+     *   /…/Android/data/dev.eden.eden_emulator/files/nand/user/save/<space>/<acct>/<title>/
+     *   → <title>  root (just created)
+     *   → …        root (just created)
+     *   → files    uid=10123 gid=10123  ← FOUND ✓
+     *
+     * Returns "uid:gid" string, or null if no non-root ancestor is found.
+     */
+    private fun findAppOwnerNumeric(path: String): String? {
+        var current = path
+        repeat(15) {
+            val escaped = escapePath(current)
+            // stat -c '%u:%g' returns numeric uid:gid (e.g. "10123:10123")
+            val result = Shell.cmd("stat -c '%u:%g' '$escaped' 2>/dev/null").exec()
+            val owner = result.out.firstOrNull()?.trim()
+            if (!owner.isNullOrBlank() && !owner.startsWith("0:") && owner != "0:0") {
+                Log.d(TAG, "findAppOwnerNumeric: found '$owner' at '$current'")
+                return owner
+            }
+            val parent = current.substringBeforeLast("/")
+            if (parent.isEmpty() || parent == current) return null
+            current = parent
+        }
+        return null
+    }
+
+    /**
+     * Walk UP the ancestor chain of [path] until we find a directory that is
+     * NOT owned by root. Returns symbolic "user:group" string as fallback when
+     * numeric resolution is unavailable.
+     *
+     * Returns "user:group" string, or null if no non-root ancestor exists.
+     */
+    private fun findAppOwner(path: String): String? {
+        var current = path
+        repeat(15) {
+            val escaped = escapePath(current)
+            val result = Shell.cmd("stat -c '%U:%G' '$escaped' 2>/dev/null").exec()
+            val owner = result.out.firstOrNull()?.trim()
+            if (!owner.isNullOrBlank() && !owner.startsWith("root")) {
+                Log.d(TAG, "findAppOwner: found '$owner' at '$current'")
+                return owner
+            }
+            val parent = current.substringBeforeLast("/")
+            if (parent.isEmpty() || parent == current) return null
+            current = parent
+        }
+        return null
     }
 
     /**
@@ -173,6 +339,39 @@ class RootAccessHelper {
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
+
+    /**
+     * Last-resort UID resolution: extract the package name from a path of the
+     * form `.../Android/data/<package>/...` and query the system package
+     * manager for its installed UID.
+     *
+     * This is needed when the entire NAND directory tree was created by root
+     * (all ancestors are uid=0) so [findAppOwnerNumeric] / [findAppOwner]
+     * return null.
+     *
+     * Returns "uid:uid" string (e.g. "10123:10123") or null on failure.
+     */
+    private fun getPackageUidFromPath(path: String): String? {
+        val pkg = extractPackageName(path) ?: return null
+        // `dumpsys package <pkg>` outputs a line like: "    userId=10123"
+        val result = Shell.cmd("dumpsys package '$pkg' 2>/dev/null | grep 'userId='").exec()
+        val line = result.out.firstOrNull { it.contains("userId=") } ?: return null
+        val uid = line.substringAfter("userId=").trim().split(Regex("\\s+")).firstOrNull() ?: return null
+        if (uid.toLongOrNull() == null) return null
+        Log.d(TAG, "getPackageUidFromPath: pkg='$pkg' uid=$uid")
+        return "$uid:$uid"
+    }
+
+    /**
+     * Extracts an Android package name from a path that contains
+     * `/Android/data/<package>/` (case-insensitive).
+     *
+     * Returns null if the path does not match the expected pattern.
+     */
+    private fun extractPackageName(path: String): String? {
+        val regex = Regex("/Android/data/([^/]+)/", RegexOption.IGNORE_CASE)
+        return regex.find(path)?.groupValues?.getOrNull(1)?.takeIf { it.isNotEmpty() }
+    }
 
     /**
      * Escape single quotes in a file path for safe shell interpolation.

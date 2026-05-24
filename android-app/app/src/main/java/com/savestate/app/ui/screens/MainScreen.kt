@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,8 +43,12 @@ fun MainScreen(
     onThemeToggle: () -> Unit,
     isDarkTheme: Boolean = true,
     appVersion: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    controllerMode: Boolean = false,
+    focusedProfileIndex: Int = -1,
+    controllerConnected: Boolean = false
 ) {
+
     val isLandscape =
         LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -90,6 +95,8 @@ fun MainScreen(
                         showSectionTitle = false,
                         showBackupFooter = false,
                         compactTable = true,
+                        focusedProfileIndex = focusedProfileIndex,
+                        controllerMode = controllerMode,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -110,6 +117,7 @@ fun MainScreen(
                         onSettingsClick = onSettingsClick,
                         hasProfileSelected = selectedProfileId != null,
                         extraDense = railExtraDense,
+                        controllerMode = controllerMode,
                         modifier = Modifier.fillMaxHeight()
                     )
                 }
@@ -127,6 +135,8 @@ fun MainScreen(
                     onFavoriteToggle = onFavoriteToggle,
                     onDeleteProfile = onDeleteProfile,
                     onEditProfile = onEditProfile,
+                    focusedProfileIndex = focusedProfileIndex,
+                    controllerMode = controllerMode,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -136,19 +146,22 @@ fun MainScreen(
                     onBackupClick = onBackupClick,
                     onRestoreClick = onRestoreClick,
                     onManageBackupsClick = onManageBackupsClick,
-                    hasProfileSelected = selectedProfileId != null
+                    hasProfileSelected = selectedProfileId != null,
+                    controllerMode = controllerMode
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 GeneralSection(
                     onNewProfileClick = onNewProfileClick,
-                    onSettingsClick = onSettingsClick
+                    onSettingsClick = onSettingsClick,
+                    controllerMode = controllerMode
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+
     }
 }
 
@@ -171,12 +184,23 @@ fun ProfilesSection(
     /** When false, backup summary lives in the detail panel (landscape master-detail) */
     showBackupFooter: Boolean = true,
     /** Tighter table header / rows (landscape list) */
-    compactTable: Boolean = false
+    compactTable: Boolean = false,
+    focusedProfileIndex: Int = -1,
+    controllerMode: Boolean = false
 ) {
     // Favorites first; stable sort keeps prior order within favorites / non-favorites
     val displayProfiles = remember(profiles) {
         profiles.sortedWith(compareByDescending<GameProfile> { it.isFavorite })
     }
+
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(focusedProfileIndex) {
+        if (focusedProfileIndex in 0 until displayProfiles.size) {
+            listState.animateScrollToItem(focusedProfileIndex)
+        }
+    }
+
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight()) {
         if (showSectionTitle) {
             SectionHeader(title = "Profiles", compact = compact)
@@ -221,6 +245,7 @@ fun ProfilesSection(
                     }
                 } else {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -235,11 +260,14 @@ fun ProfilesSection(
                                 onDeleteClick = { onDeleteProfile(profile.id) },
                                 onEditClick = { onEditProfile(profile.id) },
                                 isFirst = index == 0,
-                                compact = compactTable
+                                compact = compactTable,
+                                isFocusedByController = index == focusedProfileIndex && controllerMode,
+                                controllerMode = controllerMode
                             )
                         }
                     }
                 }
+
 
                 if (showBackupFooter) {
                     // Backup Info Footer

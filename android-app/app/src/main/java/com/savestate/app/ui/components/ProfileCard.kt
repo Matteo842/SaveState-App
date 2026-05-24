@@ -1,9 +1,12 @@
 package com.savestate.app.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,7 +57,9 @@ fun ProfileCard(
     modifier: Modifier = Modifier,
     isFirst: Boolean = false,
     /** Tighter row for landscape list */
-    compact: Boolean = false
+    compact: Boolean = false,
+    isFocusedByController: Boolean = false,
+    controllerMode: Boolean = false
 ) {
     val backgroundColor = when {
         isSelected -> DarkTableRowSelected
@@ -67,11 +72,19 @@ fun ProfileCard(
     val rowHeight = if (compact) 48.dp else 56.dp
     val starBtn = if (compact) 36.dp else 40.dp
     val delCol = if (compact) 36.dp else 40.dp
+
+    val borderModifier = if (isFocusedByController) {
+        Modifier.border(BorderStroke(2.dp, SaveStateRed))
+    } else {
+        Modifier
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(rowHeight)
             .background(backgroundColor)
+            .then(borderModifier)
             .then(if (isFirst) Modifier.tutorialTarget("first_profile_row") else Modifier)
             .combinedClickable(
                 onClick = { onProfileClick() },
@@ -82,6 +95,7 @@ fun ProfileCard(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
+
         // Red selection indicator (like desktop app)
         Box(
             modifier = Modifier
@@ -155,20 +169,30 @@ fun ProfileCard(
         // Delete button (visible on selection like desktop) + context menu anchor
         Box {
             if (isSelected) {
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.size(starBtn)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "Delete profile",
-                        tint = StatusError,
-                        modifier = Modifier.size(if (compact) 18.dp else 20.dp)
-                    )
+                    if (controllerMode) {
+                        GamepadBadge(label = "B")
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(starBtn)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Delete profile",
+                            tint = StatusError,
+                            modifier = Modifier.size(if (compact) 18.dp else 20.dp)
+                        )
+                    }
                 }
             } else {
                 Spacer(modifier = Modifier.width(delCol))
             }
+
 
             DropdownMenu(
                 expanded = menuExpanded,

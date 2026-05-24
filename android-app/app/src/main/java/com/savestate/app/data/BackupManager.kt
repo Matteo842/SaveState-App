@@ -2,6 +2,7 @@ package com.savestate.app.data
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.savestate.app.BuildConfig
@@ -385,21 +386,18 @@ class BackupManager(
                 rootRestoreTempDir = tempDir
                 extractTarget = DocumentFile.fromFile(tempDir)
                 Log.d(TAG, "Root restore: extracting to cache first")
-            } else if (profile.parentPath != null) {
-                val parentUri = Uri.parse(profile.parentPath)
-                extractTarget = DocumentFile.fromTreeUri(context, parentUri)
-                Log.d(TAG, "Using stored parentPath: ${profile.parentPath}")
             } else {
-                val destUri = Uri.parse(profile.savePath)
-                val saveDocument = DocumentFile.fromTreeUri(context, destUri)
-                extractTarget = saveDocument?.parentFile ?: saveDocument
-                Log.w(TAG, "No parentPath stored, trying fallback")
+                // SAF mode: we ALWAYS extract directly into the savePath (the actual folder where files live).
+                // This guarantees we have the necessary write permissions granted by the user.
+                val saveUri = Uri.parse(profile.savePath)
+                extractTarget = DocumentFile.fromTreeUri(context, saveUri)
+                Log.d(TAG, "SAF restore: extracting directly to savePath: ${profile.savePath}")
             }
             
             if (extractTarget == null || !extractTarget.exists()) {
                 return@withContext RestoreResult(
                     success = false,
-                    message = "Cannot access save folder.\nPlease delete this profile and re-add it."
+                    message = "Cannot access save folder.\nPlease check folder permissions or re-select the save folder."
                 )
             }
             
@@ -411,8 +409,33 @@ class BackupManager(
             val fileEntries = entries.filter { !it.isDirectory && !it.name.startsWith("savestate/") }
             val totalFiles = fileEntries.size
             var restoredFiles = 0
-            
+            val errors = mutableListOf<String>()
+
             Log.d(TAG, "ZIP contains ${entries.size} entries, ${fileEntries.size} files to restore")
+
+            // 3b. Pre-restore cleanup: remove stale files in the destination whose
+            // base name (without extension) matches a file in the backup.
+            // This covers the SAF quirk where a file was originally stored without
+            // an extension (e.g. "file0") but the backup recorded it as "file0.bin",
+            // which would otherwise leave a dangling "file0" alongside the new "file0.bin".
+            if (!isRootRestore && profile.gameFilePrefix == null) {
+                // Collect base names (no-extension) for all files we're about to restore
+                val backupBaseNames: Set<String> = fileEntries.mapNotNull { e ->
+                    val leaf = e.name.substringAfterLast("/").ifEmpty { null }
+                    leaf?.substringBeforeLast(".", leaf)
+                }.toSet()
+
+                val existingDocs = extractTarget.listFiles()
+                for (doc in existingDocs) {
+                    if (!doc.isFile) continue
+                    val docName = doc.name ?: continue
+                    val docBase = docName.substringBeforeLast(".", docName)
+                    if (docBase in backupBaseNames) {
+                        doc.delete()
+                        Log.d(TAG, "Pre-restore: removed stale file '$docName'")
+                    }
+                }
+            }
             
             // 4. Extract files
             for (entry in fileEntries) {
@@ -423,16 +446,66 @@ class BackupManager(
                         continue
                     }
                     
-                    val pathParts = entry.name.split("/").filter { it.isNotEmpty() }
+                    val pathParts = entry.name.split("/").filter { it.isNotEmpty() }.toMutableList()
                     if (pathParts.isEmpty()) continue
                     
-                    copyZipEntryWithPath(zipFile, entry, extractTarget, pathParts)
+                    // Normalize path segments to restore directly inside the save directory.
+                    // If the first folder in the ZIP matches the game's save folder name,
+                    // the legacy "root_backup_temp", or the profile name, strip it so files
+                    // land in the correct root or nested folders of the save directory.
+                    val lastSegment = try {
+                        val uri = Uri.parse(profile.savePath)
+                        uri.lastPathSegment?.substringAfterLast("/")?.substringAfterLast("%2F")
+                    } catch (e: Exception) {
+                        null
+                    }
+                    val sanitizedProfileName = sanitizeFolderName(profile.name)
+                    
+                    val firstPart = pathParts.firstOrNull()
+                    if (firstPart != null && (
+                        firstPart == "root_backup_temp" || 
+                        firstPart == lastSegment || 
+                        firstPart == sanitizedProfileName
+                    )) {
+                        Log.d(TAG, "Stripping wrapper folder '$firstPart' from path '${entry.name}'")
+                        pathParts.removeAt(0)
+                    }
+                    
+                    if (pathParts.isEmpty()) continue
+                    
+                    if (isRootRestore && rootRestoreTempDir != null) {
+                        // Root mode: extract using standard java.io.File to preserve names verbatim!
+                        var currentLocalDir = rootRestoreTempDir
+                        for (i in 0 until pathParts.size - 1) {
+                            currentLocalDir = File(currentLocalDir, pathParts[i])
+                            currentLocalDir.mkdirs()
+                        }
+                        
+                        val localFile = File(currentLocalDir, pathParts.last())
+                        if (localFile.exists()) {
+                            localFile.delete()
+                        }
+                        
+                        zipFile.getInputStream(entry).use { input ->
+                            localFile.outputStream().use { output ->
+                                val buffer = ByteArray(BUFFER_SIZE)
+                                var bytesRead: Int
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                }
+                            }
+                        }
+                    } else {
+                        // SAF mode: extract using DocumentFile (may map to RawDocumentFile or TreeDocumentFile)
+                        copyZipEntryWithPath(zipFile, entry, extractTarget!!, pathParts)
+                    }
                     
                     restoredFiles++
                     onProgress?.invoke(restoredFiles, totalFiles)
                     
                 } catch (e: Exception) {
                     Log.e(TAG, "Error restoring entry ${entry.name}: ${e.message}", e)
+                    errors.add("${entry.name}: ${e.message}")
                 }
             }
             
@@ -443,26 +516,50 @@ class BackupManager(
             if (isRootRestore && rootRestoreTempDir != null) {
                 Log.i(TAG, "Root restore: copying from cache to ${profile.savePath}")
                 
-                // Backward compatibility: backups created before the fix
-                // incorrectly wrapped all files inside a "root_backup_temp/"
-                // folder in the ZIP. Detect this and unwrap so files restore
-                // to the correct location.
+                // Determine the expected save folder name from the destination path
+                // (e.g. for Eden: "0100A..." title ID folder).
+                val savePathBasename = profile.savePath.substringAfterLast("/")
+
+                // Unwrap the source directory if files were accidentally wrapped
+                // inside a single subdirectory (legacy "root_backup_temp" or the
+                // title-ID folder itself e.g. "0100A...").
                 val actualSourceDir = rootRestoreTempDir.listFiles()?.let { children ->
                     val directFiles = children.filter { it.isFile }
-                    val legacyChild = children.find {
-                        it.isDirectory && it.name == "root_backup_temp"
-                    }
-                    if (legacyChild != null && directFiles.isEmpty()) {
-                        // Old format: every save file lives under root_backup_temp/
-                        Log.w(TAG, "Detected legacy root_backup_temp wrapper in backup – unwrapping")
-                        legacyChild
-                    } else {
+                    val singleWrapperDir = children.singleOrNull { it.isDirectory }
+                    when {
+                        // Old format: every file lives under root_backup_temp/
+                        singleWrapperDir?.name == "root_backup_temp" && directFiles.isEmpty() -> {
+                            Log.w(TAG, "Detected legacy root_backup_temp wrapper in backup – unwrapping")
+                            singleWrapperDir
+                        }
+                        // ZIP was rooted at the save folder itself (e.g. title-ID or
+                        // any single directory whose name matches the destination basename).
+                        singleWrapperDir != null && directFiles.isEmpty() &&
+                            singleWrapperDir.name == savePathBasename -> {
+                            Log.w(TAG, "Detected save-folder wrapper '${singleWrapperDir.name}' in backup – unwrapping")
+                            singleWrapperDir
+                        }
                         // New format (or mixed): files already at root level
-                        rootRestoreTempDir
+                        else -> rootRestoreTempDir
                     }
                 } ?: rootRestoreTempDir
-                
-                val copyOk = rootAccessHelper!!.copyFromCache(actualSourceDir, profile.savePath)
+
+                // Pre-restore cleanup via root: remove stale files at the destination
+                // before copying. Without this, old save files may linger alongside
+                // freshly-restored ones and confuse the emulator.
+                // SAFETY: only wipe destination if we actually have files to copy.
+                // If extraction failed and temp dir is empty, skipping deleteContents
+                // avoids leaving the destination empty (which makes Eden create a fresh
+                // save, overwriting any previously-existing data).
+                val tempHasContent = actualSourceDir.listFiles()?.isNotEmpty() == true
+                if (tempHasContent) {
+                    Log.d(TAG, "Root restore: cleaning destination '${profile.savePath}' before copy")
+                    rootAccessHelper!!.deleteContents(profile.savePath)
+                } else {
+                    Log.w(TAG, "Root restore: temp dir is empty – skipping deleteContents to preserve existing saves")
+                }
+
+                val copyOk = rootAccessHelper.copyFromCache(actualSourceDir, profile.savePath)
                 rootRestoreTempDir.deleteRecursively()
                 
                 if (!copyOk) {
@@ -474,6 +571,18 @@ class BackupManager(
             }
             
             Log.i(TAG, "Restore completed: $restoredFiles/$totalFiles files")
+            
+            if (restoredFiles == 0) {
+                val errorDetails = if (errors.isNotEmpty()) {
+                    "\n\nDetails:\n" + errors.take(3).joinToString("\n") + if (errors.size > 3) "\n..." else ""
+                } else {
+                    "\n\nMake sure the backup file contains valid save files."
+                }
+                return@withContext RestoreResult(
+                    success = false,
+                    message = "Restore failed: No files could be restored.$errorDetails"
+                )
+            }
             
             RestoreResult(
                 success = true,
@@ -497,6 +606,14 @@ class BackupManager(
     
     /**
      * Copies a ZIP entry to a DocumentFile destination.
+     *
+     * SAF's createFile() can silently append or mangle extensions based on the
+     * MIME type (e.g. "file0.bin" → "file0.bin.bin") and never overwrites an
+     * existing document – it always creates a new one with a disambiguated name.
+     * To avoid duplicates we:
+     *  1. Delete any existing document whose display-name matches fileName.
+     *  2. Create a fresh document with MIME "application/octet-stream" so the
+     *     name is stored verbatim without any extension transformation.
      */
     private fun copyZipEntryToDocument(
         zipFile: ZipFile,
@@ -504,19 +621,20 @@ class BackupManager(
         destDocument: DocumentFile,
         fileName: String
     ) {
-        // Create or overwrite the file
-        var existingFile = destDocument.findFile(fileName)
-        if (existingFile != null) {
+        // Delete existing file first to avoid SAF creating a duplicate
+        val existingFile = destDocument.findFile(fileName)
+        if (existingFile != null && existingFile.isFile) {
             existingFile.delete()
+            Log.d(TAG, "Deleted existing file before restore: $fileName")
         }
-        
-        val mimeType = getMimeType(fileName)
-        val newFile = destDocument.createFile(mimeType, fileName)
+
+        // Always use application/octet-stream so SAF stores the name verbatim
+        val targetFile = destDocument.createFile("application/octet-stream", fileName)
             ?: throw Exception("Cannot create file: $fileName")
-        
-        // Copy content
+
+        // Copy content from ZIP entry
         zipFile.getInputStream(entry).use { input ->
-            context.contentResolver.openOutputStream(newFile.uri)?.use { output ->
+            context.contentResolver.openOutputStream(targetFile.uri)?.use { output ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 var bytesRead: Int
                 while (input.read(buffer).also { bytesRead = it } != -1) {
@@ -524,7 +642,7 @@ class BackupManager(
                 }
             }
         }
-        
+
         Log.d(TAG, "Restored file: $fileName")
     }
     
@@ -649,7 +767,35 @@ class BackupManager(
     }
     
     /**
+     * Returns the true display name of a document as stored in the provider,
+     * bypassing DocumentFile.name which can silently append a MIME-type
+     * extension (e.g. turns "file0" into "file0.bin") for extensionless files.
+     *
+     * Falls back to [DocumentFile.name] if the cursor query fails.
+     */
+    private fun getRealDisplayName(document: DocumentFile): String? {
+        return try {
+            context.contentResolver.query(
+                document.uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                } else null
+            } ?: document.name
+        } catch (e: Exception) {
+            Log.w(TAG, "getRealDisplayName fallback for ${document.uri}: ${e.message}")
+            document.name
+        }
+    }
+
+    /**
      * Recursively adds a DocumentFile (file or directory) to the ZIP archive.
+     *
+     * Uses [getRealDisplayName] instead of [DocumentFile.name] to avoid the
+     * SAF quirk where extensionless files (like Eden's "file0", "system") get
+     * their name silently suffixed with ".bin" by the DocumentsProvider.
      */
     private fun addDocumentToZip(
         zipOut: ZipOutputStream,
@@ -663,10 +809,10 @@ class BackupManager(
             val dirEntry = ZipEntry(dirPath)
             zipOut.putNextEntry(dirEntry)
             zipOut.closeEntry()
-            
-            // Process children
+
+            // Process children — use real display name to avoid SAF extension mangling
             document.listFiles().forEach { child ->
-                val childName = child.name ?: return@forEach
+                val childName = getRealDisplayName(child) ?: return@forEach
                 addDocumentToZip(zipOut, child, "$arcPath/$childName", onBytesWritten)
             }
         } else if (document.isFile) {

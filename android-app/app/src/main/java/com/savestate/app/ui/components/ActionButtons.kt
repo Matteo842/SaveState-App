@@ -1,7 +1,10 @@
 package com.savestate.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.savestate.app.ui.theme.*
 import com.savestate.app.ui.tutorial.tutorialTarget
+
 
 /**
  * Section header matching SaveState desktop style
@@ -53,6 +57,37 @@ fun SectionHeader(
 }
 
 /**
+ * Gamepad button badge (Xbox style: green A, red B, blue X, yellow Y)
+ */
+@Composable
+fun GamepadBadge(
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = when (label.uppercase()) {
+        "A" -> BadgeA
+        "B" -> BadgeB
+        "X" -> BadgeX
+        "Y" -> BadgeY
+        else -> BadgeDefault
+    }
+    Box(
+        modifier = modifier
+            .size(16.dp)
+            .background(bgColor, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 9.sp
+        )
+    }
+}
+
+/**
  * Action button matching SaveState desktop style
  * Used for Backup, Restore, Manage Backups buttons
  */
@@ -70,7 +105,9 @@ fun SaveStateButton(
     dense: Boolean = false,
     /** Unified landscape rail column (fixed width, no scrolling) */
     railStyle: Boolean = false,
-    railExtraDense: Boolean = false
+    railExtraDense: Boolean = false,
+    gamepadBadge: String? = null,
+    isFocused: Boolean = false
 ) {
     val buttonHeight = when {
         railStyle && railExtraDense -> 28.dp
@@ -114,8 +151,10 @@ fun SaveStateButton(
             disabledContentColor = TextMuted
         ),
         border = BorderStroke(
-            width = 1.dp,
-            color = if (enabled) {
+            width = if (isFocused) 2.dp else 1.dp,
+            color = if (isFocused) {
+                accentColor
+            } else if (enabled) {
                 if (isPrimary) accentColor else TextMuted
             } else {
                 TextMuted.copy(alpha = 0.5f)
@@ -123,6 +162,10 @@ fun SaveStateButton(
         ),
         contentPadding = PaddingValues(horizontal = horizontalPad, vertical = verticalPad)
     ) {
+        if (gamepadBadge != null) {
+            GamepadBadge(label = gamepadBadge)
+            Spacer(modifier = Modifier.width(if (railStyle) 3.dp else 4.dp))
+        }
         Icon(
             imageVector = icon,
             contentDescription = null,
@@ -139,6 +182,7 @@ fun SaveStateButton(
     }
 }
 
+
 /**
  * Actions section with Backup, Restore, Manage Backups buttons
  * Matches desktop app "Actions" section layout
@@ -152,7 +196,8 @@ fun ActionsSection(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     stackVertically: Boolean = false,
-    tightSpacing: Boolean = false
+    tightSpacing: Boolean = false,
+    controllerMode: Boolean = false
 ) {
     val gap = if (tightSpacing) 4.dp else 6.dp
     val dense = tightSpacing
@@ -175,6 +220,7 @@ fun ActionsSection(
                     accentColor = ButtonGreen,
                     compact = compact,
                     dense = dense,
+                    gamepadBadge = if (controllerMode) "A" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("backup_btn")
                 )
                 SaveStateButton(
@@ -186,6 +232,7 @@ fun ActionsSection(
                     accentColor = ButtonBlue,
                     compact = compact,
                     dense = dense,
+                    gamepadBadge = if (controllerMode) "X" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("restore_btn")
                 )
                 SaveStateButton(
@@ -195,6 +242,7 @@ fun ActionsSection(
                     enabled = hasProfileSelected,
                     compact = compact,
                     dense = dense,
+                    gamepadBadge = if (controllerMode) "Y" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("manage_btn")
                 )
             }
@@ -212,6 +260,7 @@ fun ActionsSection(
                     enabled = hasProfileSelected,
                     isPrimary = true,
                     accentColor = ButtonGreen,
+                    gamepadBadge = if (controllerMode) "A" else null,
                     modifier = Modifier.weight(1f).tutorialTarget("backup_btn")
                 )
                 SaveStateButton(
@@ -221,6 +270,7 @@ fun ActionsSection(
                     enabled = hasProfileSelected,
                     isPrimary = true,
                     accentColor = ButtonBlue,
+                    gamepadBadge = if (controllerMode) "X" else null,
                     modifier = Modifier.weight(1f).tutorialTarget("restore_btn")
                 )
                 SaveStateButton(
@@ -228,12 +278,14 @@ fun ActionsSection(
                     icon = Icons.Filled.Folder,
                     onClick = onManageBackupsClick,
                     enabled = hasProfileSelected,
+                    gamepadBadge = if (controllerMode) "Y" else null,
                     modifier = Modifier.weight(1f).tutorialTarget("manage_btn")
                 )
             }
         }
     }
 }
+
 
 /**
  * General section with New Profile and Settings buttons
@@ -246,7 +298,8 @@ fun GeneralSection(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     stackVertically: Boolean = false,
-    tightSpacing: Boolean = false
+    tightSpacing: Boolean = false,
+    controllerMode: Boolean = false
 ) {
     val gap = if (tightSpacing) 4.dp else 6.dp
     val dense = tightSpacing
@@ -268,6 +321,7 @@ fun GeneralSection(
                     accentColor = SaveStateRed,
                     compact = compact,
                     dense = dense,
+                    gamepadBadge = if (controllerMode) "St" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("new_profile_btn")
                 )
                 SaveStateButton(
@@ -276,6 +330,7 @@ fun GeneralSection(
                     onClick = onSettingsClick,
                     compact = compact,
                     dense = dense,
+                    gamepadBadge = if (controllerMode) "Bk" else null,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -292,18 +347,21 @@ fun GeneralSection(
                     onClick = onNewProfileClick,
                     isPrimary = true,
                     accentColor = SaveStateRed,
+                    gamepadBadge = if (controllerMode) "St" else null,
                     modifier = Modifier.weight(1f).tutorialTarget("new_profile_btn")
                 )
                 SaveStateButton(
                     text = "Settings",
                     icon = Icons.Filled.Settings,
                     onClick = onSettingsClick,
+                    gamepadBadge = if (controllerMode) "Bk" else null,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
     }
 }
+
 
 /**
  * Landscape side column: Backup / Restore / Manage backups + New profile / Settings.
@@ -318,7 +376,8 @@ fun LandscapeUnifiedActionRail(
     onSettingsClick: () -> Unit,
     hasProfileSelected: Boolean,
     extraDense: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    controllerMode: Boolean = false
 ) {
     val gap = if (extraDense) 2.dp else 4.dp
     val railWidth = if (extraDense) 144.dp else 154.dp
@@ -349,6 +408,7 @@ fun LandscapeUnifiedActionRail(
                     accentColor = ButtonGreen,
                     railStyle = true,
                     railExtraDense = extraDense,
+                    gamepadBadge = if (controllerMode) "A" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("backup_btn")
                 )
                 SaveStateButton(
@@ -360,6 +420,7 @@ fun LandscapeUnifiedActionRail(
                     accentColor = ButtonBlue,
                     railStyle = true,
                     railExtraDense = extraDense,
+                    gamepadBadge = if (controllerMode) "X" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("restore_btn")
                 )
                 SaveStateButton(
@@ -369,6 +430,7 @@ fun LandscapeUnifiedActionRail(
                     enabled = hasProfileSelected,
                     railStyle = true,
                     railExtraDense = extraDense,
+                    gamepadBadge = if (controllerMode) "Y" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("manage_btn")
                 )
             }
@@ -391,6 +453,7 @@ fun LandscapeUnifiedActionRail(
                     accentColor = SaveStateRed,
                     railStyle = true,
                     railExtraDense = extraDense,
+                    gamepadBadge = if (controllerMode) "St" else null,
                     modifier = Modifier.fillMaxWidth().tutorialTarget("new_profile_btn")
                 )
                 SaveStateButton(
@@ -399,9 +462,11 @@ fun LandscapeUnifiedActionRail(
                     onClick = onSettingsClick,
                     railStyle = true,
                     railExtraDense = extraDense,
+                    gamepadBadge = if (controllerMode) "Bk" else null,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
     }
 }
+

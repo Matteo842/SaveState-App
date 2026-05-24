@@ -8,10 +8,15 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.savestate.app.controller.GamepadManager
+import com.savestate.app.controller.GamepadAction
+
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -93,6 +98,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var profileRepository: ProfileRepository
     private lateinit var tutorialPrefs: TutorialPreferences
     private lateinit var licenseGuard: LicenseGuard
+    private lateinit var gamepadManager: GamepadManager
     
     // Callback to run after storage permission is granted
     private var onStoragePermissionGranted: (() -> Unit)? = null
@@ -190,6 +196,8 @@ class MainActivity : ComponentActivity() {
         profileRepository = ProfileRepository(applicationContext, configManager)
         tutorialPrefs = TutorialPreferences(applicationContext)
         licenseGuard = LicenseGuardLoader.load(applicationContext)
+        gamepadManager = GamepadManager(applicationContext)
+
 
         // Kick off license verification once per process. Subsequent
         // Activity recreations (rotation, theme/locale changes) reuse the
@@ -287,6 +295,158 @@ class MainActivity : ComponentActivity() {
                 var showManageDialog by remember { mutableStateOf(false) }
                 var availableBackups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
                 var isRestoring by remember { mutableStateOf(false) }
+                var profileToDeleteConfirm by remember { mutableStateOf<GameProfile?>(null) }
+
+                // Observe controller manager states
+                val controllerMode by gamepadManager.controllerMode.collectAsState()
+                val focusedProfileIndex by gamepadManager.focusedProfileIndex.collectAsState()
+                val controllerConnected by gamepadManager.controllerConnected.collectAsState()
+
+                // Stable sorted profiles list for consistent gamepad navigation matching the UI display
+                val displayProfiles = remember(profiles) {
+                    profiles.sortedWith(compareByDescending { it.isFavorite })
+                }
+
+                LaunchedEffect(displayProfiles.size) {
+                    gamepadManager.setProfileCount(displayProfiles.size)
+                }
+
+                LaunchedEffect(focusedProfileIndex, controllerMode) {
+                    if (controllerMode && focusedProfileIndex in displayProfiles.indices) {
+                        selectedProfileId = displayProfiles[focusedProfileIndex].id
+                    }
+                }
+
+                LaunchedEffect(showEmulatorDialog, showGameDialog, showRestoreDialog, showManageDialog, backupErrorMessage, profileToDeleteConfirm) {
+                    gamepadManager.dialogOpen = showEmulatorDialog || showGameDialog || showRestoreDialog || showManageDialog || (backupErrorMessage != null) || (profileToDeleteConfirm != null)
+                }
+
+
+                // Define actions as reusable lambdas so they can be triggered via both UI buttons and gamepad actions
+                val performBackupAction = {
+                    val selectedProfile = profiles.find { it.id == selectedProfileId }
+                    if (selectedProfile == null) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Please select a profile first",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else if (isBackingUp) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Backup already in progress...",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        isBackingUp = true
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Starting backup for ${selectedProfile.name}...",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        
+                        coroutineScope.launch {
+                            val result = backupManager.performBackup(
+                                profile = selectedProfile,
+                                maxBackups = maxBackupsPerProfile,
+                                maxSourceSizeMB = maxSourceSizeMB,
+                                compressionLevel = compressionLevel
+                            )
+                            
+                            if (result.success) {
+                                val (count, lastDate) = backupManager.getBackupStats(selectedProfile)
+                                profiles = profiles.map { p ->
+                                    if (p.id == selectedProfile.id) {
+                                        p.copy(
+                                            backupCount = count,
+                                            lastBackup = lastDate?.let {
+                                                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(it)
+                                            }
+                                        )
+                                    } else p
+                                }
+                                profileRepository.saveProfiles(profiles)
+                                
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    result.message,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                backupErrorMessage = result.message
+                            }
+                            
+                            isBackingUp = false
+                        }
+                    }
+                }
+
+                val performRestoreAction = {
+                    val selectedProfile = profiles.find { it.id == selectedProfileId }
+                    if (selectedProfile == null) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Please select a profile first",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        availableBackups = backupManager.listBackups(selectedProfile)
+                        showRestoreDialog = true
+                    }
+                }
+
+                val performManageBackupsAction = {
+                    val selectedProfile = profiles.find { it.id == selectedProfileId }
+                    if (selectedProfile == null) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Please select a profile first",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        availableBackups = backupManager.listBackups(selectedProfile)
+                        showManageDialog = true
+                    }
+                }
+
+                val performNewProfileAction = {
+                    showEmulatorDialog = true
+                    isLoadingEmulators = true
+                    
+                    coroutineScope.launch {
+                        delay(300)
+                        val detected = withContext(Dispatchers.IO) {
+                            emulatorDetector.detectInstalledEmulators()
+                        }
+                        installedEmulators = detected
+                        isLoadingEmulators = false
+                        Log.d("SaveState", "Detected ${detected.size} emulators: ${detected.map { it.displayName }}")
+                    }
+                }
+
+                val performDeleteAction = {
+                    selectedProfileId?.let { id ->
+                        val profileToDelete = profiles.find { it.id == id }
+                        if (profileToDelete != null) {
+                            profileToDeleteConfirm = profileToDelete
+                        }
+                    }
+                }
+
+                LaunchedEffect(displayProfiles, selectedProfileId, isBackingUp) {
+                    gamepadManager.setActionCallback { action ->
+                        when (action) {
+                            GamepadAction.BACKUP -> performBackupAction()
+                            GamepadAction.RESTORE -> performRestoreAction()
+                            GamepadAction.MANAGE_BACKUPS -> performManageBackupsAction()
+                            GamepadAction.DELETE -> performDeleteAction()
+                            GamepadAction.NEW_PROFILE -> performNewProfileAction()
+                            GamepadAction.SETTINGS -> { showSettingsScreen = true }
+                            else -> {}
+                        }
+                    }
+                }
+
                 
                 // Load backup info on startup
                 LaunchedEffect(currentBackupPath) {
@@ -495,7 +655,16 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         profiles = profiles,
                         selectedProfileId = selectedProfileId,
-                        onProfileSelect = { id -> selectedProfileId = id },
+                        onProfileSelect = { id -> 
+                            selectedProfileId = id
+                            // Sync focus index back to gamepad manager if user taps physically
+                            val index = displayProfiles.indexOfFirst { it.id == id }
+                            if (index != -1) {
+                                gamepadManager.setProfileCount(displayProfiles.size)
+                                // We don't want to trigger a LaunchedEffect loop, but since GamepadManager will only set if different:
+                                // gamepadManager.onKeyEvent/onTouchEvent will naturally handle it
+                            }
+                        },
                         onFavoriteToggle = { id ->
                             profiles = profiles.map { 
                                 if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it 
@@ -503,127 +672,25 @@ class MainActivity : ComponentActivity() {
                             profileRepository.saveProfiles(profiles)
                         },
                         onDeleteProfile = { id ->
-                            profiles = profiles.filter { it.id != id }
-                            profileRepository.saveProfiles(profiles)
-                            if (selectedProfileId == id) selectedProfileId = null
+                            val profileToDelete = profiles.find { it.id == id }
+                            if (profileToDelete != null) {
+                                profileToDeleteConfirm = profileToDelete
+                            }
                         },
                         onEditProfile = { id ->
                             editingProfileId = id
                         },
                         onBackupClick = {
-                            // Find the selected profile
-                            val selectedProfile = profiles.find { it.id == selectedProfileId }
-                            if (selectedProfile == null) {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Please select a profile first",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                return@MainScreen
-                            }
-                            
-                            // Avoid duplicate backups
-                            if (isBackingUp) {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Backup already in progress...",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                return@MainScreen
-                            }
-                            
-                            // Start backup
-                            isBackingUp = true
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Starting backup for ${selectedProfile.name}...",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            
-                            coroutineScope.launch {
-                                val result = backupManager.performBackup(
-                                    profile = selectedProfile,
-                                    maxBackups = maxBackupsPerProfile,
-                                    maxSourceSizeMB = maxSourceSizeMB,
-                                    compressionLevel = compressionLevel
-                                )
-                                
-                                if (result.success) {
-                                    val (count, lastDate) = backupManager.getBackupStats(selectedProfile)
-                                    profiles = profiles.map { p ->
-                                        if (p.id == selectedProfile.id) {
-                                            p.copy(
-                                                backupCount = count,
-                                                lastBackup = lastDate?.let {
-                                                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(it)
-                                                }
-                                            )
-                                        } else p
-                                    }
-                                    profileRepository.saveProfiles(profiles)
-                                    
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        result.message,
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                } else {
-                                    backupErrorMessage = result.message
-                                }
-                                
-                                isBackingUp = false
-                            }
+                            performBackupAction()
                         },
                         onRestoreClick = {
-                            // Find the selected profile
-                            val selectedProfile = profiles.find { it.id == selectedProfileId }
-                            if (selectedProfile == null) {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Please select a profile first",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                return@MainScreen
-                            }
-                            
-                            // Load available backups for this profile
-                            availableBackups = backupManager.listBackups(selectedProfile)
-                            showRestoreDialog = true
+                            performRestoreAction()
                         },
                         onManageBackupsClick = {
-                            // Open manage backups dialog
-                            val selectedProfile = profiles.find { it.id == selectedProfileId }
-                            if (selectedProfile == null) {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Please select a profile first",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                return@MainScreen
-                            }
-                            
-                            availableBackups = backupManager.listBackups(selectedProfile)
-                            showManageDialog = true
+                            performManageBackupsAction()
                         },
                         onNewProfileClick = { 
-                            // Start scanning for emulators (permission already granted at startup)
-                            showEmulatorDialog = true
-                            isLoadingEmulators = true
-                            
-                            coroutineScope.launch {
-                                // Small delay for UI feedback
-                                delay(300)
-                                
-                                // Detect emulators on background thread
-                                val detected = withContext(Dispatchers.IO) {
-                                    emulatorDetector.detectInstalledEmulators()
-                                }
-                                
-                                installedEmulators = detected
-                                isLoadingEmulators = false
-                                
-                                Log.d("SaveState", "Detected ${detected.size} emulators: ${detected.map { it.displayName }}")
-                            }
+                            performNewProfileAction()
                         },
                         onSettingsClick = { showSettingsScreen = true },
                         onThemeToggle = {
@@ -631,7 +698,10 @@ class MainActivity : ComponentActivity() {
                             settingsManager.setDarkThemeEnabled(isDarkTheme)
                         },
                         isDarkTheme = isDarkTheme,
-                        appVersion = APP_VERSION
+                        appVersion = APP_VERSION,
+                        controllerMode = controllerMode,
+                        focusedProfileIndex = focusedProfileIndex,
+                        controllerConnected = controllerConnected
                     )
                 }
 
@@ -887,6 +957,58 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
+                // Delete profile confirmation dialog
+                if (profileToDeleteConfirm != null) {
+                    AlertDialog(
+                        onDismissRequest = { profileToDeleteConfirm = null },
+                        containerColor = DarkSurface,
+                        titleContentColor = SaveStateRed,
+                        textContentColor = TextPrimary,
+                        title = {
+                            Text(
+                                text = "Delete Profile",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "Are you sure you want to delete the profile \"${profileToDeleteConfirm?.name}\"? This action cannot be undone.",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    profileToDeleteConfirm?.let { profile ->
+                                        val id = profile.id
+                                        profiles = profiles.filter { it.id != id }
+                                        profileRepository.saveProfiles(profiles)
+                                        if (selectedProfileId == id) selectedProfileId = null
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Profile \"${profile.name}\" deleted",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    profileToDeleteConfirm = null
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = SaveStateRed)
+                            ) {
+                                Text("Delete")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { profileToDeleteConfirm = null },
+                                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -1048,4 +1170,19 @@ class MainActivity : ComponentActivity() {
             onGranted()
         }
     }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (::gamepadManager.isInitialized && gamepadManager.onKeyEvent(event)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::gamepadManager.isInitialized) {
+            gamepadManager.onTouchEvent()
+        }
+        return super.dispatchTouchEvent(ev)
+    }
 }
+

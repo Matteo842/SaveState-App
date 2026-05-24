@@ -12,13 +12,19 @@ android {
         applicationId = "com.savestate.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.9.5"
+        versionCode = 21
+        versionName = "0.9.8.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            // In debug builds the license gate is bypassed entirely so you can
+            // sideload and test without waiting for Play Store review.
+            // This flag is NEVER true in release builds.
+            buildConfigField("boolean", "BYPASS_LICENSE", "true")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -26,6 +32,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("boolean", "BYPASS_LICENSE", "false")
         }
     }
     

@@ -277,6 +277,35 @@ class EdenManager {
         return null
     }
 
+    /**
+     * Mirrors Eden's title-ID masking: `title_id & ~(0xFFULL)` clears the
+     * lower 8 bits (= the last 2 hex chars).  Eden uses this masked value as
+     * the folder name in the NEW save-data layout
+     * (`nand/user/save/account/<uuid>/<masked_title>/0/`).
+     *
+     * Example: 0100A94014A4C00E → 0100A94014A4C000
+     */
+    private fun maskTitleId(titleId: String): String =
+        if (titleId.length >= 2)
+            titleId.uppercase().dropLast(2) + "00"
+        else
+            titleId.uppercase()
+
+    /**
+     * Scan [savePath] (= `nand/user/save/`) for all title save directories.
+     *
+     * Eden maintains **two** on-disk layouts and always prefers the NEW one
+     * when both exist (see `GetFullPath` in savedata_factory.cpp):
+     *
+     *   NEW:  save/account/<uuid32>/<title_masked>/0/
+     *         save/device/<title_masked>/0/
+     *   OLD:  save/<space16>/<account32>/<title16>/
+     *
+     * We perform two passes so that any title already found in a NEW-layout
+     * path is **not** duplicated from its OLD-layout path.  Without this,
+     * users could accidentally back up the stale OLD path while Eden reads
+     * from the NEW path, making the restore invisible to the emulator.
+     */
     private fun rootScanSaveTree(
         root: RootAccessHelper,
         savePath: String
@@ -284,10 +313,17 @@ class EdenManager {
         val results = mutableListOf<DetectedGame>()
         val seenTitlePaths = mutableSetOf<String>()
 
-        for (entry in root.listDirectories(savePath)) {
+        // Collect the masked title IDs that already have a NEW-layout directory so
+        // we can skip their OLD-layout counterparts in the second pass.
+        val maskedTitleIdsInNewPaths = mutableSetOf<String>()
+
+        val topDirs = root.listDirectories(savePath)
+
+        // ── Pass 1: NEW layout (account/ and device/) ──────────────────────────
+        for (entry in topDirs) {
             val entryPath = "$savePath/$entry"
             when {
-                // NEW: save/account/<uuid32>/<title16>/0/
+                // NEW: save/account/<uuid32>/<title16_masked>/0/
                 entry.equals("account", ignoreCase = true) -> {
                     for (uuid in root.listDirectories(entryPath)) {
                         if (!HEX32.matches(uuid)) continue
@@ -296,36 +332,48 @@ class EdenManager {
                             if (!HEX16.matches(titleId)) continue
                             val titlePath = "$uuidPath/$titleId"
                             if (seenTitlePaths.add(titlePath)) {
+                                maskedTitleIdsInNewPaths.add(maskTitleId(titleId))
                                 results.add(buildRootGame(root, titleId, titlePath, uuidPath))
                             }
                         }
                     }
                 }
 
-                // NEW: save/device/<title16>/0/
+                // NEW: save/device/<title16_masked>/0/
                 entry.equals("device", ignoreCase = true) -> {
                     for (titleId in root.listDirectories(entryPath)) {
                         if (!HEX16.matches(titleId)) continue
                         val titlePath = "$entryPath/$titleId"
                         if (seenTitlePaths.add(titlePath)) {
+                            maskedTitleIdsInNewPaths.add(maskTitleId(titleId))
                             results.add(buildRootGame(root, titleId, titlePath, entryPath))
                         }
                     }
                 }
+            }
+        }
 
-                // OLD: save/<space16>/<account32>/<title16>/
-                HEX16.matches(entry) -> {
-                    val spacePath = entryPath
-                    for (account in root.listDirectories(spacePath)) {
-                        if (!HEX32.matches(account)) continue
-                        val accountPath = "$spacePath/$account"
-                        for (titleId in root.listDirectories(accountPath)) {
-                            if (!HEX16.matches(titleId)) continue
-                            val titlePath = "$accountPath/$titleId"
-                            if (seenTitlePaths.add(titlePath)) {
-                                results.add(buildRootGame(root, titleId, titlePath, accountPath))
-                            }
-                        }
+        // ── Pass 2: OLD layout (<space16>/<account32>/<title16>/) ──────────────
+        // Skip any title whose masked ID was already collected from a NEW path.
+        // This mirrors Eden's own logic: if `future_dir != nullptr`, use NEW path.
+        for (entry in topDirs) {
+            if (!HEX16.matches(entry)) continue   // Only OLD-style space-ID folders
+            val spacePath = "$savePath/$entry"
+            for (account in root.listDirectories(spacePath)) {
+                if (!HEX32.matches(account)) continue
+                val accountPath = "$spacePath/$account"
+                for (titleId in root.listDirectories(accountPath)) {
+                    if (!HEX16.matches(titleId)) continue
+                    // Skip if the NEW layout already covers this title (possibly
+                    // with a masked ID — e.g. OLD has "…C00E", NEW has "…C000").
+                    if (maskTitleId(titleId) in maskedTitleIdsInNewPaths) {
+                        Log.d(TAG, "rootScanSaveTree: skipping OLD-layout title '$titleId' " +
+                                   "(covered by NEW-layout path)")
+                        continue
+                    }
+                    val titlePath = "$accountPath/$titleId"
+                    if (seenTitlePaths.add(titlePath)) {
+                        results.add(buildRootGame(root, titleId, titlePath, accountPath))
                     }
                 }
             }
