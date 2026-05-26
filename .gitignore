@@ -21,3 +21,5 @@ android-app/app/src/main/assets/adi-registration.properties
 # Anti-piracy / Play Store license guard - real implementation (NEVER commit)
 android-app/app/src/main/java/com/savestate/app/security/secure/
 android-app/app/build-secure.gradle.kts
+*.apk
+/android-app/app/debug

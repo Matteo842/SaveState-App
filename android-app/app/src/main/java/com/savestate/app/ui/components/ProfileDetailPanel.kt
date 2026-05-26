@@ -238,6 +238,9 @@ private fun getEmulatorIconResourceStatic(emulator: String): Int? {
     return when (emulator.lowercase()) {
         "ppsspp" -> R.drawable.ic_emulator_ppsspp
         "retroarch" -> R.drawable.ic_emulator_retroarch
+        "yuzu" -> R.drawable.ic_emulator_yuzu
+        "citron" -> R.drawable.ic_emulator_citron
+        "eden" -> R.drawable.ic_emulator_eden
         else -> null
     }
 }

@@ -232,6 +232,9 @@ private fun getEmulatorIconResource(emulator: String): Int? {
     return when (emulator.lowercase()) {
         "ppsspp" -> R.drawable.ic_emulator_ppsspp
         "retroarch" -> R.drawable.ic_emulator_retroarch
+        "yuzu" -> R.drawable.ic_emulator_yuzu
+        "citron" -> R.drawable.ic_emulator_citron
+        "eden" -> R.drawable.ic_emulator_eden
         // Add more emulators here as icons are added:
         // "dolphin" -> R.drawable.ic_emulator_dolphin
         // "duckstation" -> R.drawable.ic_emulator_duckstation
