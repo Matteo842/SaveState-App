@@ -1,11 +1,13 @@
 package com.savestate.app.ui.dialogs
 
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.savestate.app.controller.GamepadManager
 import com.savestate.app.data.BackupInfo
 
 /**
@@ -32,10 +35,73 @@ import com.savestate.app.data.BackupInfo
 fun ManageBackupsDialog(
     profileName: String,
     backups: List<BackupInfo>,
+    gamepadManager: GamepadManager,
     onDelete: (BackupInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf<BackupInfo?>(null) }
+    
+    var focusedBackupIndex by remember { mutableStateOf(if (backups.isNotEmpty()) 0 else -1) }
+    val listState = rememberLazyListState()
+    
+    DisposableEffect(gamepadManager, backups, focusedBackupIndex, showDeleteConfirm) {
+        gamepadManager.setDialogKeyCallback { keyEvent ->
+            if (keyEvent.action == KeyEvent.ACTION_DOWN) {
+                when (keyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (backups.isNotEmpty()) {
+                            focusedBackupIndex = (focusedBackupIndex + 1).coerceAtMost(backups.size - 1)
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (backups.isNotEmpty()) {
+                            focusedBackupIndex = (focusedBackupIndex - 1).coerceAtLeast(0)
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_BUTTON_A -> {
+                        val currentConfirm = showDeleteConfirm
+                        if (currentConfirm != null) {
+                            onDelete(currentConfirm)
+                            showDeleteConfirm = null
+                        } else {
+                            if (focusedBackupIndex in backups.indices) {
+                                showDeleteConfirm = backups[focusedBackupIndex]
+                            }
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
+                        if (showDeleteConfirm != null) {
+                            showDeleteConfirm = null
+                        } else {
+                            onDismiss()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            } else {
+                keyEvent.keyCode in listOf(
+                    KeyEvent.KEYCODE_DPAD_DOWN,
+                    KeyEvent.KEYCODE_DPAD_UP,
+                    KeyEvent.KEYCODE_BUTTON_A,
+                    KeyEvent.KEYCODE_BUTTON_B,
+                    KeyEvent.KEYCODE_BACK
+                )
+            }
+        }
+        onDispose {
+            gamepadManager.setDialogKeyCallback(null)
+        }
+    }
+    
+    LaunchedEffect(focusedBackupIndex) {
+        if (focusedBackupIndex in backups.indices) {
+            listState.animateScrollToItem(focusedBackupIndex)
+        }
+    }
     
     Dialog(
         onDismissRequest = onDismiss,
@@ -139,12 +205,15 @@ fun ManageBackupsDialog(
                     )
                     
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(backups) { backup ->
+                            val index = backups.indexOf(backup)
                             ManageBackupItem(
                                 backup = backup,
+                                isFocused = index == focusedBackupIndex,
                                 onDelete = { showDeleteConfirm = backup }
                             )
                         }
@@ -190,16 +259,20 @@ fun ManageBackupsDialog(
 @Composable
 private fun ManageBackupItem(
     backup: BackupInfo,
+    isFocused: Boolean = false,
     onDelete: () -> Unit
 ) {
+    val borderColor = if (isFocused) Color(0xFFf85149) else Color(0xFF30363d)
+    val backgroundColor = if (isFocused) Color(0xFF1f1515) else Color.Transparent
+    
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.Transparent)
+            .background(backgroundColor)
             .border(
-                width = 1.dp,
-                color = Color(0xFF30363d),
+                width = if (isFocused) 2.dp else 1.dp,
+                color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(16.dp),

@@ -41,6 +41,7 @@ fun MainScreen(
     onNewProfileClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onThemeToggle: () -> Unit,
+    onControllerClick: () -> Unit,
     isDarkTheme: Boolean = true,
     appVersion: String,
     modifier: Modifier = Modifier,
@@ -65,6 +66,7 @@ fun MainScreen(
             isDarkTheme = isDarkTheme,
             onThemeToggle = onThemeToggle,
             onSettingsClick = onSettingsClick,
+            onControllerClick = onControllerClick,
             compact = isLandscape
         )
 

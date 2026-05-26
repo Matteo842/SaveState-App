@@ -61,6 +61,7 @@ import com.savestate.app.ui.dialogs.RestoreBackupDialog
 import com.savestate.app.ui.dialogs.ManageBackupsDialog
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
+import com.savestate.app.ui.dialogs.ControllerSettingsDialog
 import com.savestate.app.ui.screens.EditProfileScreen
 import com.savestate.app.ui.screens.MainScreen
 import com.savestate.app.ui.screens.SettingsScreen
@@ -197,6 +198,8 @@ class MainActivity : ComponentActivity() {
         tutorialPrefs = TutorialPreferences(applicationContext)
         licenseGuard = LicenseGuardLoader.load(applicationContext)
         gamepadManager = GamepadManager(applicationContext)
+        val savedMappings = settingsManager.getControllerMappings()
+        gamepadManager.updateMappings(savedMappings)
 
 
         // Kick off license verification once per process. Subsequent
@@ -253,6 +256,9 @@ class MainActivity : ComponentActivity() {
                     }
                     LicenseStatus.Ok -> Unit
                 }
+
+                // State for controller settings dialog
+                var showControllerSettingsDialog by remember { mutableStateOf(false) }
 
                 // State for emulator selection dialog
                 var showEmulatorDialog by remember { mutableStateOf(false) }
@@ -317,8 +323,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(showEmulatorDialog, showGameDialog, showRestoreDialog, showManageDialog, backupErrorMessage, profileToDeleteConfirm) {
-                    gamepadManager.dialogOpen = showEmulatorDialog || showGameDialog || showRestoreDialog || showManageDialog || (backupErrorMessage != null) || (profileToDeleteConfirm != null)
+                LaunchedEffect(showEmulatorDialog, showGameDialog, showRestoreDialog, showManageDialog, backupErrorMessage, profileToDeleteConfirm, showControllerSettingsDialog) {
+                    gamepadManager.dialogOpen = showEmulatorDialog || showGameDialog || showRestoreDialog || showManageDialog || (backupErrorMessage != null) || (profileToDeleteConfirm != null) || showControllerSettingsDialog
                 }
 
 
@@ -697,6 +703,7 @@ class MainActivity : ComponentActivity() {
                             isDarkTheme = !isDarkTheme
                             settingsManager.setDarkThemeEnabled(isDarkTheme)
                         },
+                        onControllerClick = { showControllerSettingsDialog = true },
                         isDarkTheme = isDarkTheme,
                         appVersion = APP_VERSION,
                         controllerMode = controllerMode,
@@ -722,6 +729,28 @@ class MainActivity : ComponentActivity() {
                     hasProfiles = profiles.isNotEmpty(),
                     callbacks = tutorialCallbacks
                 )
+                }
+
+                // Controller Settings Dialog
+                if (showControllerSettingsDialog) {
+                    ControllerSettingsDialog(
+                        initialMappings = settingsManager.getControllerMappings(),
+                        controllerConnected = controllerConnected,
+                        gamepadManager = gamepadManager,
+                        onSave = { newMappings ->
+                            settingsManager.setControllerMappings(newMappings)
+                            gamepadManager.updateMappings(newMappings)
+                            showControllerSettingsDialog = false
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Controller settings saved",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onDismiss = {
+                            showControllerSettingsDialog = false
+                        }
+                    )
                 }
 
                 // Emulator selection dialog
@@ -822,6 +851,7 @@ class MainActivity : ComponentActivity() {
                         profileName = selectedProfile?.name ?: "",
                         backups = availableBackups,
                         isRestoring = isRestoring,
+                        gamepadManager = gamepadManager,
                         onRestore = { backupInfo ->
                             if (selectedProfile == null) {
                                 showRestoreDialog = false
@@ -863,6 +893,7 @@ class MainActivity : ComponentActivity() {
                     ManageBackupsDialog(
                         profileName = selectedProfile?.name ?: "",
                         backups = availableBackups,
+                        gamepadManager = gamepadManager,
                         onDelete = { backupInfo ->
                             val deleted = backupManager.deleteBackup(backupInfo)
                             if (deleted) {

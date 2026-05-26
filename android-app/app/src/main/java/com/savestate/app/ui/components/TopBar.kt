@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,6 +30,7 @@ fun SaveStateTopBar(
     isDarkTheme: Boolean = true,
     onThemeToggle: () -> Unit,
     onSettingsClick: () -> Unit,
+    onControllerClick: () -> Unit,
     modifier: Modifier = Modifier,
     /** Shorter bar and title in landscape to give content more height */
     compact: Boolean = false
@@ -81,8 +83,29 @@ fun SaveStateTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Settings gear icon
                 val iconSize = if (compact) 20.dp else 22.dp
+                
+                // Controller mapping button
+                IconButton(onClick = onControllerClick) {
+                    Icon(
+                        imageVector = Icons.Filled.SportsEsports,
+                        contentDescription = "Controller Settings",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(iconSize)
+                    )
+                }
+
+                // Theme toggle (sun/moon) - matching desktop
+                IconButton(onClick = onThemeToggle) {
+                    Icon(
+                        imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        contentDescription = "Toggle theme",
+                        tint = if (isDarkTheme) StarGold else TextSecondary,
+                        modifier = Modifier.size(iconSize)
+                    )
+                }
+
+                // Settings gear icon
                 IconButton(
                     onClick = onSettingsClick,
                     modifier = Modifier.tutorialTarget("settings_btn")
@@ -91,16 +114,6 @@ fun SaveStateTopBar(
                         imageVector = Icons.Filled.Settings,
                         contentDescription = "Settings",
                         tint = TextSecondary,
-                        modifier = Modifier.size(iconSize)
-                    )
-                }
-                
-                // Theme toggle (sun/moon) - matching desktop
-                IconButton(onClick = onThemeToggle) {
-                    Icon(
-                        imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                        contentDescription = "Toggle theme",
-                        tint = if (isDarkTheme) StarGold else TextSecondary,
                         modifier = Modifier.size(iconSize)
                     )
                 }

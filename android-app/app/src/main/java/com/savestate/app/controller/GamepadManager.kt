@@ -13,10 +13,25 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class GamepadAction {
     BACKUP, RESTORE, MANAGE_BACKUPS, DELETE,
-    NEW_PROFILE, SETTINGS, NAV_UP, NAV_DOWN, PAGE_UP, PAGE_DOWN
+    NEW_PROFILE, SETTINGS, NAV_UP, NAV_DOWN, PAGE_UP, PAGE_DOWN, NONE
 }
 
 class GamepadManager(private val context: Context) {
+    private var buttonMappings = mapOf<Int, GamepadAction>(
+        KeyEvent.KEYCODE_BUTTON_A to GamepadAction.BACKUP,
+        KeyEvent.KEYCODE_BUTTON_B to GamepadAction.DELETE,
+        KeyEvent.KEYCODE_BUTTON_X to GamepadAction.RESTORE,
+        KeyEvent.KEYCODE_BUTTON_Y to GamepadAction.MANAGE_BACKUPS,
+        KeyEvent.KEYCODE_BUTTON_START to GamepadAction.NEW_PROFILE,
+        KeyEvent.KEYCODE_BUTTON_SELECT to GamepadAction.SETTINGS,
+        KeyEvent.KEYCODE_BUTTON_L1 to GamepadAction.PAGE_UP,
+        KeyEvent.KEYCODE_BUTTON_R1 to GamepadAction.PAGE_DOWN
+    )
+
+    fun updateMappings(newMappings: Map<Int, GamepadAction>) {
+        buttonMappings = newMappings
+    }
+
     private val _controllerMode = MutableStateFlow(false)
     val controllerMode: StateFlow<Boolean> = _controllerMode.asStateFlow()
 
@@ -38,6 +53,11 @@ class GamepadManager(private val context: Context) {
 
     private var profileCount = 0
     private var actionCallback: ((GamepadAction) -> Unit)? = null
+    private var dialogKeyCallback: ((KeyEvent) -> Boolean)? = null
+
+    fun setDialogKeyCallback(callback: ((KeyEvent) -> Boolean)?) {
+        dialogKeyCallback = callback
+    }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var repeatJob: Job? = null
@@ -96,6 +116,9 @@ class GamepadManager(private val context: Context) {
         }
 
         if (dialogOpen) {
+            if (dialogKeyCallback?.invoke(keyEvent) == true) {
+                return true
+            }
             // Let dialogs consume their own keys, but allow back/B to work for dismissal
             if (keyEvent.keyCode == KeyEvent.KEYCODE_BACK || keyEvent.keyCode == KeyEvent.KEYCODE_BUTTON_B) {
                 return false
@@ -116,37 +139,12 @@ class GamepadManager(private val context: Context) {
                     startRepeat(keyCode, GamepadAction.NAV_DOWN)
                     return true
                 }
-                KeyEvent.KEYCODE_BUTTON_A -> {
-                    triggerAction(GamepadAction.BACKUP)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_X -> {
-                    triggerAction(GamepadAction.RESTORE)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_Y -> {
-                    triggerAction(GamepadAction.MANAGE_BACKUPS)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_B -> {
-                    triggerAction(GamepadAction.DELETE)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_START -> {
-                    triggerAction(GamepadAction.NEW_PROFILE)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_SELECT -> {
-                    triggerAction(GamepadAction.SETTINGS)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_L1 -> {
-                    triggerAction(GamepadAction.PAGE_UP)
-                    return true
-                }
-                KeyEvent.KEYCODE_BUTTON_R1 -> {
-                    triggerAction(GamepadAction.PAGE_DOWN)
-                    return true
+                else -> {
+                    val mappedAction = buttonMappings[keyCode]
+                    if (mappedAction != null && mappedAction != GamepadAction.NONE) {
+                        triggerAction(mappedAction)
+                        return true
+                    }
                 }
             }
         } else if (action == KeyEvent.ACTION_UP) {
@@ -154,13 +152,7 @@ class GamepadManager(private val context: Context) {
                 stopRepeat()
                 return true
             }
-            if (keyCode in listOf(
-                    KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
-                    KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y,
-                    KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_BUTTON_SELECT,
-                    KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1,
-                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN
-                )) {
+            if (keyCode in buttonMappings.keys || keyCode in listOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) {
                 return true
             }
         }

@@ -3,7 +3,9 @@ package com.savestate.app.data
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.view.KeyEvent
 import androidx.documentfile.provider.DocumentFile
+import com.savestate.app.controller.GamepadAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -202,6 +204,71 @@ class SettingsManager(
             writeSettingsJson(obj.toString(2))
         } catch (e: Exception) {
             Log.e(TAG, "Error saving theme preference: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Gets customized controller button mappings.
+     */
+    fun getControllerMappings(): Map<Int, GamepadAction> {
+        val defaultMappings = mapOf(
+            KeyEvent.KEYCODE_BUTTON_A to GamepadAction.BACKUP,
+            KeyEvent.KEYCODE_BUTTON_B to GamepadAction.DELETE,
+            KeyEvent.KEYCODE_BUTTON_X to GamepadAction.RESTORE,
+            KeyEvent.KEYCODE_BUTTON_Y to GamepadAction.MANAGE_BACKUPS,
+            KeyEvent.KEYCODE_BUTTON_START to GamepadAction.NEW_PROFILE,
+            KeyEvent.KEYCODE_BUTTON_SELECT to GamepadAction.SETTINGS,
+            KeyEvent.KEYCODE_BUTTON_L1 to GamepadAction.PAGE_UP,
+            KeyEvent.KEYCODE_BUTTON_R1 to GamepadAction.PAGE_DOWN
+        )
+        
+        return try {
+            val json = readSettingsJson() ?: return defaultMappings
+            val obj = JSONObject(json)
+            if (!obj.has("controllerMappings")) return defaultMappings
+            
+            val mappingsObj = obj.getJSONObject("controllerMappings")
+            val result = mutableMapOf<Int, GamepadAction>()
+            
+            // Start with defaults so missing keys are populated
+            result.putAll(defaultMappings)
+            
+            val keys = mappingsObj.keys()
+            while (keys.hasNext()) {
+                val keyStr = keys.next()
+                try {
+                    val keyCode = keyStr.toInt()
+                    val actionName = mappingsObj.getString(keyStr)
+                    val action = GamepadAction.valueOf(actionName)
+                    result[keyCode] = action
+                } catch (e: Exception) {
+                    // Skip invalid mapping
+                }
+            }
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading controller mappings: ${e.message}", e)
+            defaultMappings
+        }
+    }
+    
+    /**
+     * Persists customized controller button mappings.
+     */
+    fun setControllerMappings(mappings: Map<Int, GamepadAction>) {
+        try {
+            val json = readSettingsJson() ?: "{}"
+            val obj = JSONObject(json)
+            
+            val mappingsObj = JSONObject()
+            for ((keyCode, action) in mappings) {
+                mappingsObj.put(keyCode.toString(), action.name)
+            }
+            
+            obj.put("controllerMappings", mappingsObj)
+            writeSettingsJson(obj.toString(2))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving controller mappings: ${e.message}", e)
         }
     }
     

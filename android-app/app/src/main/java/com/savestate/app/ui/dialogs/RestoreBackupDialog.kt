@@ -1,11 +1,13 @@
 package com.savestate.app.ui.dialogs
 
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.savestate.app.controller.GamepadManager
 import com.savestate.app.data.BackupInfo
 
 /**
@@ -33,10 +36,71 @@ fun RestoreBackupDialog(
     profileName: String,
     backups: List<BackupInfo>,
     isRestoring: Boolean,
+    gamepadManager: GamepadManager,
     onRestore: (BackupInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedBackup by remember { mutableStateOf<BackupInfo?>(null) }
+    
+    val listState = rememberLazyListState()
+    
+    DisposableEffect(gamepadManager, backups, isRestoring) {
+        gamepadManager.setDialogKeyCallback { keyEvent ->
+            if (keyEvent.action == KeyEvent.ACTION_DOWN) {
+                when (keyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (backups.isNotEmpty()) {
+                            val currentIndex = backups.indexOf(selectedBackup)
+                            val nextIndex = (currentIndex + 1).coerceAtMost(backups.size - 1)
+                            selectedBackup = backups[nextIndex]
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (backups.isNotEmpty()) {
+                            val currentIndex = backups.indexOf(selectedBackup)
+                            val prevIndex = if (currentIndex == -1) 0 else (currentIndex - 1).coerceAtLeast(0)
+                            selectedBackup = backups[prevIndex]
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_BUTTON_A -> {
+                        if (selectedBackup != null && !isRestoring) {
+                            onRestore(selectedBackup!!)
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
+                        if (!isRestoring) {
+                            onDismiss()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            } else {
+                keyEvent.keyCode in listOf(
+                    KeyEvent.KEYCODE_DPAD_DOWN,
+                    KeyEvent.KEYCODE_DPAD_UP,
+                    KeyEvent.KEYCODE_BUTTON_A,
+                    KeyEvent.KEYCODE_BUTTON_B,
+                    KeyEvent.KEYCODE_BACK
+                )
+            }
+        }
+        onDispose {
+            gamepadManager.setDialogKeyCallback(null)
+        }
+    }
+    
+    LaunchedEffect(selectedBackup) {
+        selectedBackup?.let { backup ->
+            val index = backups.indexOf(backup)
+            if (index != -1) {
+                listState.animateScrollToItem(index)
+            }
+        }
+    }
     
     Dialog(
         onDismissRequest = { if (!isRestoring) onDismiss() },
@@ -145,6 +209,7 @@ fun RestoreBackupDialog(
                     )
                     
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
