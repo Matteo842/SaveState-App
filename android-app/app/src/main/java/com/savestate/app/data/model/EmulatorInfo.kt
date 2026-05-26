@@ -281,8 +281,15 @@ object EmulatorConfig {
             ),
             displayName = "Yuzu",
             defaultSavePaths = listOf(
-                "/storage/emulated/0/yuzu/nand/user/save"
-            )
+                "/storage/emulated/0/yuzu/nand/user/save",
+                "/storage/emulated/0/Yuzu/nand/user/save"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/org.yuzu.yuzu_emu/files",
+                "/storage/emulated/0/Android/data/org.yuzu.yuzu_emu.ea/files"
+            ),
+            supportsManualPath = true
         ),
         EmulatorDefinition(
             emulatorType = Emulator.CITRON,
@@ -291,8 +298,14 @@ object EmulatorConfig {
             ),
             displayName = "Citron",
             defaultSavePaths = listOf(
-                "/storage/emulated/0/citron/nand/user/save"
-            )
+                "/storage/emulated/0/citron/nand/user/save",
+                "/storage/emulated/0/Citron/nand/user/save"
+            ),
+            requiresRoot = true,
+            rootSavePaths = listOf(
+                "/storage/emulated/0/Android/data/org.citron.citron_emu/files"
+            ),
+            supportsManualPath = true
         ),
 
         // Eden - Nintendo Switch emulator (Yuzu fork)

@@ -223,7 +223,7 @@ private fun SelectFolderPrompt(
 ) {
     val isRetroArch = emulatorName == "RetroArch"
     val isDolphin = emulatorName == "Dolphin"
-    val isEden = emulatorName == "Eden"
+    val isSwitch = emulatorName == "Eden" || emulatorName == "Yuzu" || emulatorName == "Citron"
     
     // Get folder structure based on emulator
     val folderPath = when (emulatorName) {
@@ -358,7 +358,7 @@ private fun SelectFolderPrompt(
                     text = when {
                         isRetroArch -> "Make sure RetroArch saves to an accessible folder (e.g. Internal Storage/RetroArch), not the default Android/data location."
                         isDolphin -> "Make sure Dolphin's user directory is set to an accessible folder (e.g. Internal Storage/dolphin-emu)."
-                        isEden -> "Without root, Eden must be configured with a custom save path: open Eden → Settings → System → Storage and set a save data location outside Android/data, then pick that folder here."
+                        isSwitch -> "Without root, $emulatorName must be configured with a custom save path: open $emulatorName → Settings → System → Storage and set a save data location outside Android/data, then pick that folder here."
                         else -> "If you haven't set a custom save folder in your emulator, the default Android/data location may not be accessible."
                     },
                     color = TextSecondary,

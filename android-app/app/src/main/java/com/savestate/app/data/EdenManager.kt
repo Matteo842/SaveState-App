@@ -44,7 +44,7 @@ class EdenManager {
 
         /** Folder names walked through when looking for title-id folders. */
         private val WALK_FOLDER_NAMES = setOf(
-            "eden", "nand", "user", "save", "sdmc", "data", "account", "device"
+            "eden", "yuzu", "citron", "nand", "user", "save", "sdmc", "data", "account", "device"
         )
 
         // ── Switch game-title database ──────────────────────────────────
@@ -93,12 +93,12 @@ class EdenManager {
     // ══ SAF scanning ════════════════════════════════════════════════════
 
     /**
-     * Scan a user-selected SAF folder for Eden saves.
+     * Scan a user-selected SAF folder for Eden/Yuzu/Citron saves.
      * Auto-detects which level of the nand/user/save tree was selected.
      */
-    fun scanSafFolder(documentFile: DocumentFile): List<DetectedGame> {
+    fun scanSafFolder(documentFile: DocumentFile, emulatorType: Emulator): List<DetectedGame> {
         val folderName = documentFile.name ?: ""
-        Log.d(TAG, "Scanning SAF folder: '$folderName'")
+        Log.d(TAG, "Scanning SAF folder: '$folderName' for ${emulatorType.displayName}")
 
         val titleDirs = mutableListOf<DocumentFile>()
         collectTitleDirsSaf(documentFile, titleDirs, depth = 0)
@@ -112,7 +112,7 @@ class EdenManager {
             }
         }
 
-        return titleDirs.map { dir -> buildGameFromSafTitleDir(dir) }
+        return titleDirs.map { dir -> buildGameFromSafTitleDir(dir, emulatorType) }
     }
 
     /**
@@ -166,7 +166,7 @@ class EdenManager {
         }
     }
 
-    private fun buildGameFromSafTitleDir(titleDir: DocumentFile): DetectedGame {
+    private fun buildGameFromSafTitleDir(titleDir: DocumentFile, emulatorType: Emulator): DetectedGame {
         val titleId = titleDir.name ?: "unknown"
         val saveCount = try {
             countFilesRecursivelySaf(titleDir)
@@ -186,7 +186,7 @@ class EdenManager {
             gameName = displayName,
             savePath = titleDir.uri.toString(),
             parentPath = parentUri,
-            emulatorType = Emulator.EDEN,
+            emulatorType = emulatorType,
             saveCount = saveCount,
             lastModified = lastModified
         )
@@ -219,7 +219,8 @@ class EdenManager {
      */
     fun scanRootPaths(
         rootHelper: RootAccessHelper,
-        basePaths: List<String>
+        basePaths: List<String>,
+        emulatorType: Emulator
     ): List<DetectedGame> {
         val results = mutableListOf<DetectedGame>()
 
@@ -230,12 +231,12 @@ class EdenManager {
             // Typical structure: <basePath>/nand/user/save/<space>/<account>/<title>
             val savePath = "$basePath/nand/user/save"
             if (rootHelper.directoryExists(savePath)) {
-                results.addAll(rootScanSaveTree(rootHelper, savePath))
+                results.addAll(rootScanSaveTree(rootHelper, savePath, emulatorType))
             } else {
                 // Fallback: try to discover nested save folder.
                 val discovered = findSaveDirRoot(rootHelper, basePath, 0)
                 if (discovered != null) {
-                    results.addAll(rootScanSaveTree(rootHelper, discovered))
+                    results.addAll(rootScanSaveTree(rootHelper, discovered, emulatorType))
                 }
             }
         }
@@ -308,7 +309,8 @@ class EdenManager {
      */
     private fun rootScanSaveTree(
         root: RootAccessHelper,
-        savePath: String
+        savePath: String,
+        emulatorType: Emulator
     ): List<DetectedGame> {
         val results = mutableListOf<DetectedGame>()
         val seenTitlePaths = mutableSetOf<String>()
@@ -333,7 +335,7 @@ class EdenManager {
                             val titlePath = "$uuidPath/$titleId"
                             if (seenTitlePaths.add(titlePath)) {
                                 maskedTitleIdsInNewPaths.add(maskTitleId(titleId))
-                                results.add(buildRootGame(root, titleId, titlePath, uuidPath))
+                                results.add(buildRootGame(root, titleId, titlePath, uuidPath, emulatorType))
                             }
                         }
                     }
@@ -346,7 +348,7 @@ class EdenManager {
                         val titlePath = "$entryPath/$titleId"
                         if (seenTitlePaths.add(titlePath)) {
                             maskedTitleIdsInNewPaths.add(maskTitleId(titleId))
-                            results.add(buildRootGame(root, titleId, titlePath, entryPath))
+                            results.add(buildRootGame(root, titleId, titlePath, entryPath, emulatorType))
                         }
                     }
                 }
@@ -373,7 +375,7 @@ class EdenManager {
                     }
                     val titlePath = "$accountPath/$titleId"
                     if (seenTitlePaths.add(titlePath)) {
-                        results.add(buildRootGame(root, titleId, titlePath, accountPath))
+                        results.add(buildRootGame(root, titleId, titlePath, accountPath, emulatorType))
                     }
                 }
             }
@@ -387,7 +389,8 @@ class EdenManager {
         root: RootAccessHelper,
         titleId: String,
         titlePath: String,
-        parentPath: String
+        parentPath: String,
+        emulatorType: Emulator
     ): DetectedGame {
         val displayName = getGameNameFromDatabase(titleId) ?: titleId
         return DetectedGame(
@@ -395,7 +398,7 @@ class EdenManager {
             gameName = displayName,
             savePath = titlePath,
             parentPath = parentPath,
-            emulatorType = Emulator.EDEN,
+            emulatorType = emulatorType,
             saveCount = root.countFiles(titlePath),
             lastModified = root.getLastModified(titlePath)
         )

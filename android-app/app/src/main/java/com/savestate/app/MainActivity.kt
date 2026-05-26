@@ -1078,7 +1078,7 @@ class MainActivity : ComponentActivity() {
                     Emulator.DUCKSTATION -> duckStationManager.scanSafFolder(documentFile)
                     Emulator.M64PLUS_FZ -> m64PlusFZManager.scanSafFolder(documentFile)
                     Emulator.NETHERSX2 -> netherSX2Manager.scanSafFolder(documentFile)
-                    Emulator.EDEN -> edenManager.scanSafFolder(documentFile)
+                    Emulator.EDEN, Emulator.YUZU, Emulator.CITRON -> edenManager.scanSafFolder(documentFile, emulatorType)
                     else -> ppssppManager.scanSafFolder(
                         documentFile, contentResolver,
                         emulatorType ?: Emulator.PPSSPP
@@ -1116,7 +1116,7 @@ class MainActivity : ComponentActivity() {
             Emulator.DUCKSTATION -> duckStationManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.M64PLUS_FZ -> m64PlusFZManager.scanRootPaths(rootAccessHelper, rootPaths)
             Emulator.NETHERSX2 -> netherSX2Manager.scanRootPaths(rootAccessHelper, rootPaths)
-            Emulator.EDEN -> edenManager.scanRootPaths(rootAccessHelper, rootPaths)
+            Emulator.EDEN, Emulator.YUZU, Emulator.CITRON -> edenManager.scanRootPaths(rootAccessHelper, rootPaths, emulator.emulatorType)
             else -> emptyList()
         }
     }
