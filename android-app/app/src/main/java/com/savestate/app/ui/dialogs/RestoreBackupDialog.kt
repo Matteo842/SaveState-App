@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -40,9 +42,10 @@ fun RestoreBackupDialog(
     onRestore: (BackupInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedBackup by remember { mutableStateOf<BackupInfo?>(null) }
+    var selectedBackup by remember { mutableStateOf(if (backups.isNotEmpty()) backups.first() else null) }
     
     val listState = rememberLazyListState()
+    val controllerMode by gamepadManager.controllerMode.collectAsState()
     
     DisposableEffect(gamepadManager, backups, isRestoring) {
         gamepadManager.setDialogKeyCallback { keyEvent ->
@@ -156,7 +159,8 @@ fun RestoreBackupDialog(
                     
                     IconButton(
                         onClick = onDismiss,
-                        enabled = !isRestoring
+                        enabled = !isRestoring,
+                        modifier = Modifier.focusProperties { canFocus = false }
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -225,40 +229,105 @@ fun RestoreBackupDialog(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Restore button
-                    Button(
-                        onClick = { 
-                            selectedBackup?.let { onRestore(it) }
-                        },
-                        enabled = selectedBackup != null && !isRestoring,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF238636),
-                            disabledContainerColor = Color(0xFF21262d)
-                        )
-                    ) {
-                        if (isRestoring) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
+                    if (controllerMode) {
+                        // Premium controller navigation hints
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .background(Color(0xFF161b22), shape = RoundedCornerShape(12.dp))
+                                .border(1.dp, Color(0xFF3d4663), shape = RoundedCornerShape(12.dp))
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .background(Color(0xFF238636), shape = CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "A",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = if (isRestoring) "Restoring..." else "Restore",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .background(Color(0xFFf85149), shape = CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "B",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "Back",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    } else {
+                        // Restore button
+                        Button(
+                            onClick = { 
+                                selectedBackup?.let { onRestore(it) }
+                            },
+                            enabled = selectedBackup != null && !isRestoring,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .focusProperties { canFocus = false },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF238636),
+                                disabledContainerColor = Color(0xFF21262d)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Restoring...")
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Restore,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Restore Selected Backup",
-                                fontWeight = FontWeight.SemiBold
-                            )
+                        ) {
+                            if (isRestoring) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Restoring...")
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Restore,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Restore Selected Backup",
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
@@ -288,6 +357,7 @@ private fun BackupItem(
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(enabled = isEnabled) { onSelect() }
+            .focusProperties { canFocus = false }
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

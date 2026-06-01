@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +45,7 @@ fun ManageBackupsDialog(
     
     var focusedBackupIndex by remember { mutableStateOf(if (backups.isNotEmpty()) 0 else -1) }
     val listState = rememberLazyListState()
+    val controllerMode by gamepadManager.controllerMode.collectAsState()
     
     DisposableEffect(gamepadManager, backups, focusedBackupIndex, showDeleteConfirm) {
         gamepadManager.setDialogKeyCallback { keyEvent ->
@@ -153,7 +156,10 @@ fun ManageBackupsDialog(
                         )
                     }
                     
-                    IconButton(onClick = onDismiss) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.focusProperties { canFocus = false }
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
@@ -219,6 +225,71 @@ fun ManageBackupsDialog(
                         }
                     }
                 }
+                
+                if (controllerMode) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    // Premium controller navigation hints
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(Color(0xFF161b22), shape = RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFF3d4663), shape = RoundedCornerShape(12.dp))
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(Color(0xFFf85149), shape = CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "A",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "Delete",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(Color(0xFF8b949e), shape = CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "B",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "Back",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
             }
         }
         
@@ -275,6 +346,7 @@ private fun ManageBackupItem(
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
+            .focusProperties { canFocus = false }
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -307,7 +379,10 @@ private fun ManageBackupItem(
             }
         }
         
-        IconButton(onClick = onDelete) {
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier.focusProperties { canFocus = false }
+        ) {
             Icon(
                 imageVector = Icons.Default.Delete,
                 contentDescription = "Delete backup",

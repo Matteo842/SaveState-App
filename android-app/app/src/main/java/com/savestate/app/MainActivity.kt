@@ -61,7 +61,7 @@ import com.savestate.app.ui.dialogs.RestoreBackupDialog
 import com.savestate.app.ui.dialogs.ManageBackupsDialog
 import com.savestate.app.ui.dialogs.SelectEmulatorDialog
 import com.savestate.app.ui.dialogs.SelectGameDialog
-import com.savestate.app.ui.dialogs.ControllerSettingsDialog
+import com.savestate.app.ui.screens.ControllerSettingsScreen
 import com.savestate.app.ui.screens.EditProfileScreen
 import com.savestate.app.ui.screens.MainScreen
 import com.savestate.app.ui.screens.SettingsScreen
@@ -257,8 +257,8 @@ class MainActivity : ComponentActivity() {
                     LicenseStatus.Ok -> Unit
                 }
 
-                // State for controller settings dialog
-                var showControllerSettingsDialog by remember { mutableStateOf(false) }
+                // State for controller settings screen
+                var showControllerSettingsScreen by remember { mutableStateOf(false) }
 
                 // State for emulator selection dialog
                 var showEmulatorDialog by remember { mutableStateOf(false) }
@@ -323,8 +323,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(showEmulatorDialog, showGameDialog, showRestoreDialog, showManageDialog, backupErrorMessage, profileToDeleteConfirm, showControllerSettingsDialog) {
-                    gamepadManager.dialogOpen = showEmulatorDialog || showGameDialog || showRestoreDialog || showManageDialog || (backupErrorMessage != null) || (profileToDeleteConfirm != null) || showControllerSettingsDialog
+                LaunchedEffect(showEmulatorDialog, showGameDialog, showRestoreDialog, showManageDialog, backupErrorMessage, profileToDeleteConfirm) {
+                    gamepadManager.dialogOpen = showEmulatorDialog || showGameDialog || showRestoreDialog || showManageDialog || (backupErrorMessage != null) || (profileToDeleteConfirm != null)
                 }
 
 
@@ -657,6 +657,23 @@ class MainActivity : ComponentActivity() {
                         },
                         appVersion = APP_VERSION
                     )
+                } else if (showControllerSettingsScreen) {
+                    ControllerSettingsScreen(
+                        initialMappings = settingsManager.getControllerMappings(),
+                        controllerConnected = controllerConnected,
+                        onSave = { newMappings ->
+                            settingsManager.setControllerMappings(newMappings)
+                            gamepadManager.updateMappings(newMappings)
+                            showControllerSettingsScreen = false
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Controller settings saved",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onBackClick = { showControllerSettingsScreen = false },
+                        appVersion = APP_VERSION
+                    )
                 } else {
                     MainScreen(
                         profiles = profiles,
@@ -703,7 +720,7 @@ class MainActivity : ComponentActivity() {
                             isDarkTheme = !isDarkTheme
                             settingsManager.setDarkThemeEnabled(isDarkTheme)
                         },
-                        onControllerClick = { showControllerSettingsDialog = true },
+                        onControllerClick = { showControllerSettingsScreen = true },
                         isDarkTheme = isDarkTheme,
                         appVersion = APP_VERSION,
                         controllerMode = controllerMode,
@@ -729,28 +746,6 @@ class MainActivity : ComponentActivity() {
                     hasProfiles = profiles.isNotEmpty(),
                     callbacks = tutorialCallbacks
                 )
-                }
-
-                // Controller Settings Dialog
-                if (showControllerSettingsDialog) {
-                    ControllerSettingsDialog(
-                        initialMappings = settingsManager.getControllerMappings(),
-                        controllerConnected = controllerConnected,
-                        gamepadManager = gamepadManager,
-                        onSave = { newMappings ->
-                            settingsManager.setControllerMappings(newMappings)
-                            gamepadManager.updateMappings(newMappings)
-                            showControllerSettingsDialog = false
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Controller settings saved",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        onDismiss = {
-                            showControllerSettingsDialog = false
-                        }
-                    )
                 }
 
                 // Emulator selection dialog
